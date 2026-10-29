@@ -1,0 +1,5 @@
+supabase/
+*.sql
+*.xlsx
+*.xls
+*.csv
