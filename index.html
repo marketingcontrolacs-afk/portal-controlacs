@@ -1181,7 +1181,14 @@ const MODS=[{g:'Rotina diária',i:'m_fin'},{g:'Gestão financeira',i:'m_gf'},{g:
 const SECOES=['Dia a dia','Mensagens','Cadastros','Bom Controle','Relatórios','Avançado'];
 const MEGA={g:null,t:0};
 const navGrp=n=>typeof n.g==='function'?n.g():n.g;
-const navItens=()=>NAV.filter(n=>n.ok()&&eqPode(n.k));
+// telas que não dependem da empresa escolhida no topo
+const telaSemEmp=k=>k.startsWith('cfg')||k==='avisos'||k==='projetos';
+// o menu mostra só os módulos da empresa escolhida: empresa só de RH mostra só o RH (Carol, 29/10)
+function serveEmp(n){
+  const e=escCli.value||EMP;
+  return telaSemEmp(n.k)||!e||e==='*'||e==='int'||!CLIENTES.some(c=>c.id===e)||empresasDe(n.k).some(c=>c.id===e);
+}
+const navItens=()=>NAV.filter(n=>n.ok()&&eqPode(n.k)&&serveEmp(n));
 const svgI=k=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICO[k]}</svg>`;
 const navBadge=n=>NAVBADGE[n.k]?`<span class="nbadge" title="${n.k==='tesouraria'?'Empresas sem conferência física há mais de 7 dias':n.k==='gftes'?'Lançamentos alterados pelo cliente depois da revisão':n.k==='projetos'?(ehAdm()?'Pedidos para validar ou com mensagem nova':'Seus pedidos com resposta nova'):n.k==='ctbexp'?'Empresas com o portal da contabilidade ainda não configurado':'Com novidade'}">${NAVBADGE[n.k]}</span>`:'';
 function renderNav(){
@@ -1208,7 +1215,14 @@ $('modrow').addEventListener('mouseenter',()=>clearTimeout(MEGA.t));
 $('mega').addEventListener('click',e=>{const b=e.target.closest('[data-v]');if(b){megaFecha();go(b.dataset.v)}});
 document.addEventListener('pointerdown',e=>{if(MEGA.g&&!$('modrow').contains(e.target))megaFecha()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&MEGA.g){const g=MEGA.g;megaFecha();$('nav').querySelector(`[data-mod="${g}"]`)?.focus()}});
-// empresas que aparecem no seletor para o módulo aberto
+// empresas que a pessoa vê em pelo menos um módulo: a lista do topo traz sempre todas,
+// sem filtrar pelo módulo aberto (Carol, 29/10)
+function empresasTopo(){
+  const ids=new Set();
+  NAV.filter(n=>!n.soon&&!telaSemEmp(n.k)&&n.ok()&&eqPode(n.k)).forEach(n=>empresasDe(n.k).forEach(c=>ids.add(c.id)));
+  return CLIENTES.filter(c=>ids.has(c.id));
+}
+// empresas em que o módulo vale
 function empresasDe(m){
   const l=empresasMod(m),so=ehEsc()&&!ehAdm()&&ME.empresas_equipe?.length?ME.empresas_equipe:null;
   return so?l.filter(c=>so.includes(c.id)):l;
@@ -1231,8 +1245,8 @@ const EMPK='portal_empresa';
 let EMP=(()=>{try{return localStorage.getItem(EMPK)||''}catch(e){return ''}})();
 function guardaEmp(){const v=escCli.value;if(v&&v!=='*'&&v!=='int'){EMP=v;try{localStorage.setItem(EMPK,v)}catch(e){}}}
 function fillClientes(){
-  const m=VIEW,lista=empresasDe(m),cur=escCli.value,v=(cur==='*'||cur==='int')&&escCli.dataset.mod===m?cur:EMP||cur;escCli.dataset.mod=m;
-  const todas=(m==='rh'||m==='repasse'||m==='colab'||m==='tarefas')&&(lista.length>1||m==='tarefas'&&ehEsc())?'<option value="*">Todas as empresas</option>':'';
+  const m=VIEW,lista=empresasTopo(),doMod=empresasDe(m),cur=escCli.value,v=(cur==='*'||cur==='int')&&escCli.dataset.mod===m?cur:EMP||cur;escCli.dataset.mod=m;
+  const todas=(m==='rh'||m==='repasse'||m==='colab'||m==='tarefas')&&(doMod.length>1||m==='tarefas'&&ehEsc())?'<option value="*">Todas as empresas</option>':'';
   const internas=m==='tarefas'&&ehEsc()?'<option value="int">Internas da Controlacs</option>':'';
   escCli.innerHTML=todas+internas+lista.map(c=>`<option value="${c.id}">${esc(c.nome)}</option>`).join('')||'<option value="">Nenhuma empresa</option>';
   if(lista.some(c=>c.id===v)||(todas&&v==='*')||(internas&&v==='int'))escCli.value=v;
@@ -1242,9 +1256,16 @@ function fillClientes(){
 escCli.onchange=()=>{guardaEmp();openView()};
 // a seção aberta fica guardada: ao atualizar a página, o portal volta para ela (Carol, 27/10)
 const SECK='portal_secao';
-function go(v){if(!eqPode(v))return;VIEW=v;try{localStorage.setItem(SECK,v)}catch(e){}renderNav();fillClientes();openView()}
+function go(v){if(!eqPode(v))return;VIEW=v;try{localStorage.setItem(SECK,v)}catch(e){}fillClientes();openView()}
+// a empresa escolhida não tem a tela aberta (ex.: empresa só de RH): vai para uma tela dela, do mesmo módulo se houver
+function viewDaEmp(){
+  const n=NAV.find(x=>x.k===VIEW);if(!n||serveEmp(n))return;
+  const itens=navItens(),alt=itens.find(x=>navGrp(x)===navGrp(n)&&!x.soon)||itens.find(x=>x.k==='gfdash')||itens.find(x=>!x.soon);
+  if(!alt)return;VIEW=alt.k;try{localStorage.setItem(SECK,VIEW)}catch(e){}fillClientes();
+}
 const cliAtual=()=>CLIENTES.find(c=>c.id===escCli.value);
 function openView(){
+  viewDaEmp();renderNav();
   ['viewDash','viewOp','viewEsc','viewMod','viewCfg','viewRH','viewFolha','viewColab','viewDocs','viewBC','viewRep','viewPremio','viewPonto','viewBen','viewTar','viewAv','viewProj','viewGF','viewGT','viewGTe','viewGX','viewGC','viewGR','viewRel','viewFat','viewPC','viewCtb'].forEach(x=>$(x).hidden=true);
   const cli=cliAtual();
   // Financeiro › Caixa é a tela de lançamento (o escritório vê igual ao operador);
@@ -1299,7 +1320,8 @@ async function boot(){
   const first=NAV.find(n=>n.ok()&&!n.soon&&eqPode(n.k));
   if(!first){show('viewPend');return}
   const salva=(()=>{try{return localStorage.getItem(SECK)}catch(e){return null}})(),volta=NAV.find(n=>n.k===salva&&n.ok()&&!n.soon&&eqPode(n.k));
-  show('app');go(ehEsc()&&eqPode('gfdash')?'gfdash':(volta||first).k);   // o escritório abre no dashboard da empresa
+  // ao atualizar a página, volta para a tela em que estava; no primeiro acesso, o escritório abre no dashboard da empresa
+  show('app');go(volta?volta.k:ehEsc()&&eqPode('gfdash')?'gfdash':first.k);
   const novid=()=>{tNovidades();avNovidades();pjNovidades();tcAtrasos();gteNovidades();ctbPendencias()};novid();clearInterval(boot.t);boot.t=setInterval(novid,60000);
 }
 $('loginForm').addEventListener('submit',async e=>{
@@ -5614,16 +5636,19 @@ async function gfContasDe(cid,forcar){
 // todos os cadastros ativos da empresa (e os que valem para todas), clientes e fornecedores juntos
 let GFPT={cid:null,lista:[]};
 async function gfPessoasTodas(cid){
-  if(GFPT.cid!==cid)GFPT={cid,lista:await todas(()=>sb.from('fin_pessoas').select('id,nome,fantasia,papel').or(`cliente_id.eq.${cid},cliente_id.is.null`).eq('ativo',true).order('nome'))};
+  if(GFPT.cid!==cid)GFPT={cid,lista:await todas(()=>sb.from('fin_pessoas').select('id,nome,fantasia,papel,parceiro_id').or(`cliente_id.eq.${cid},cliente_id.is.null`).eq('ativo',true).order('nome'))};
   return GFPT.lista;
 }
+// parceiro (repasses) aparece pelo nome local, que fica no nome fantasia do fornecedor; o nome global vai ao lado
+const pesNome=p=>p.parceiro_id&&p.fantasia?p.fantasia:p.nome;
+const pesRot=p=>{const o=pesNome(p)===p.nome?p.fantasia:p.nome;return o&&o!==pesNome(p)?esc(o):''};
 // nas entradas os clientes vêm primeiro; nas saídas, os fornecedores (a lista mostra só o nome, e o nome fantasia quando houver)
 const pesOpts=(ls,ent)=>[...ls].sort((a,b)=>((a.papel===(ent?'fornecedor':'cliente'))-(b.papel===(ent?'fornecedor':'cliente')))||a.nome.localeCompare(b.nome))
-  .map(p=>`<option value="${esc(p.nome)}">${p.fantasia&&p.fantasia!==p.nome?esc(p.fantasia):''}</option>`).join('');
+  .map(p=>`<option value="${esc(pesNome(p))}">${pesRot(p)}</option>`).join('');
 async function gfPessoasDe(cid,papel){
   const key=cid+'|'+papel;
   // todos os cadastros, com os do papel pedido (cliente ou fornecedor) primeiro
-  if(GFP.key!==key){const ls=await todas(()=>sb.from('fin_pessoas').select('id,nome,fantasia,documento,fornecedor_bc,pix_chave,pix_tipo,papel').or(`cliente_id.eq.${cid},cliente_id.is.null`).eq('ativo',true).order('nome'));
+  if(GFP.key!==key){const ls=await todas(()=>sb.from('fin_pessoas').select('id,nome,fantasia,documento,fornecedor_bc,pix_chave,pix_tipo,papel,parceiro_id').or(`cliente_id.eq.${cid},cliente_id.is.null`).eq('ativo',true).order('nome'));
     GFP={key,lista:ls.filter(p=>p.papel===papel||p.papel==='ambos').concat(ls.filter(p=>p.papel!==papel&&p.papel!=='ambos'))}}
   return GFP.lista;
 }
@@ -5977,7 +6002,7 @@ async function abrirGT(t,tipo){
   const movs=t?GT.movs[t.id]||[]:[],pago=t?GT.pago[t.id]||0:0,falta=t?Math.max(0,r2(t.valor-pago)):0;
   $('gtdTitle').textContent=t?(t.pessoa_nome||(P?'Conta a pagar':'Conta a receber')):(P?'Nova conta a pagar':'Nova conta a receber')+' · '+cli.nome;
   $('gtdChip').innerHTML=t?(s=>`<span class="chip ${s[0]}">${s[1]}</span>`)(gtSit(t)):'';
-  let h=`<datalist id="gtPesList">${pes.map(p=>`<option value="${esc(p.nome)}">${p.fantasia&&p.fantasia!==p.nome?esc(p.fantasia):''}</option>`).join('')}</datalist>
+  let h=`<datalist id="gtPesList">${pes.map(p=>`<option value="${esc(pesNome(p))}">${pesRot(p)}</option>`).join('')}</datalist>
   <div class="fields">
     <label class="f wide">${P?'Fornecedor':'Cliente'} *<input id="gt_pessoa" list="gtPesList" value="${v('pessoa_nome')}" placeholder="Digite para buscar no cadastro" autocomplete="off"></label>
     <label class="f wide">Descrição<input id="gt_descricao" value="${v('descricao')}" placeholder="${P?'Ex.: aluguel da sala':'Ex.: convênio Unimed, setembro'}"></label>
@@ -7419,10 +7444,10 @@ async function renderRep(){
   PARC=r1.data||[];PALT={};(r2_.data||[]).forEach(a=>PALT[a.parceiro_id]=a);PDESC={};(r3.data||[]).forEach(d=>(PDESC[d.parceiro_id]||=[]).push(d));
   const nomeCli=id=>CLIENTES.find(c=>c.id===id)?.nome||'';
   const f=$('pFiltro').value,q=$('pBusca').value.trim().toLowerCase();
-  const rows=PARC.filter(p=>(f==='inativos'?!p.ativo:p.ativo)&&(f!=='alerta'||pAlertas(p).length)&&(!q||p.nome.toLowerCase().includes(q)))
+  const rows=PARC.filter(p=>(f==='inativos'?!p.ativo:p.ativo)&&(f!=='alerta'||pAlertas(p).length)&&(!q||[p.nome,p.nome_global,...(p.nomes_locais||[])].some(n=>(n||'').toLowerCase().includes(q))))
     .sort((a,b)=>(pAlertas(b).length>0)-(pAlertas(a).length>0)||a.nome.localeCompare(b.nome));
   $('pHead').innerHTML=`<tr><th class="l">Parceiro</th>${todas?'<th class="l">Empresa</th>':''}<th class="l">Pix</th><th class="l">Banco · agência · conta</th><th class="l">Titular</th><th class="l">Alertas</th></tr>`;
-  $('pBody').innerHTML=rows.map(p=>{const al=pAlertas(p);return `<tr class="click" data-id="${p.id}" tabindex="0"><td class="l"><b>${esc(p.nome)}</b></td>${todas?`<td class="l">${esc(nomeCli(p.cliente_id))}</td>`:''}<td class="l">${p.pix_chave?esc(p.pix_chave)+`<br><span class="muted">${esc(p.pix_tipo||'')}</span>`:'<span class="muted">—</span>'}</td><td class="l">${p.banco||p.conta?`${esc(p.banco||'')}<br><span class="muted">Ag. ${esc(p.agencia||'—')} · ${esc(p.conta||'—')}</span>`:'<span class="muted">—</span>'}</td><td class="l">${esc(p.titular||'')}${p.cpf_cnpj?`<br><span class="muted">${esc(p.cpf_cnpj)}</span>`:''}</td><td class="l"><div class="chips">${al.map(a=>`<span class="chip ${a[0]}">${a[1]}</span>`).join('')||'<span class="chip c-ok">✔ OK</span>'}</div></td></tr>`}).join('')
+  $('pBody').innerHTML=rows.map(p=>{const al=pAlertas(p);return `<tr class="click" data-id="${p.id}" tabindex="0"><td class="l"><b>${esc(p.nome)}</b>${p.nome_global&&p.nome_global!==p.nome?`<br><span class="muted">${esc(p.nome_global)}</span>`:''}</td>${todas?`<td class="l">${esc(nomeCli(p.cliente_id))}</td>`:''}<td class="l">${p.pix_chave?esc(p.pix_chave)+`<br><span class="muted">${esc(p.pix_tipo||'')}</span>`:'<span class="muted">—</span>'}</td><td class="l">${p.banco||p.conta?`${esc(p.banco||'')}<br><span class="muted">Ag. ${esc(p.agencia||'—')} · ${esc(p.conta||'—')}</span>`:'<span class="muted">—</span>'}</td><td class="l">${esc(p.titular||'')}${p.cpf_cnpj?`<br><span class="muted">${esc(p.cpf_cnpj)}</span>`:''}</td><td class="l"><div class="chips">${al.map(a=>`<span class="chip ${a[0]}">${a[1]}</span>`).join('')||'<span class="chip c-ok">✔ OK</span>'}</div></td></tr>`}).join('')
     ||`<tr><td class="l muted" colspan="6">${f==='alerta'?'Nenhum parceiro com alerta.':PARC.length?'Nenhum parceiro neste filtro.':'Nenhum parceiro cadastrado.'+($('pNovo').hidden?'':' Use “Novo cadastro ou alteração” para começar.')}</td></tr>`;
   const ativos=PARC.filter(p=>p.ativo),nAlt=Object.keys(PALT).length,nNovo=ativos.filter(p=>!p.conferido).length;
   const descs=Object.values(PDESC).flat(),vDesc=r2(descs.reduce((x,d)=>x+(+d.valor),0)),semConta=ativos.filter(p=>!p.pix_chave&&!(p.banco&&p.conta)).length;
@@ -7444,7 +7469,7 @@ function pCampos(pre,p,dis,soConta){
   const d=dis?' disabled':'',v=k=>esc(p?.[k]||'');
   const sel=(k,t,ops)=>`<label class="f">${t}<select id="${pre}_${k}"${d}><option value=""></option>${ops.map(o=>`<option${p?.[k]===o?' selected':''}>${o}</option>`).join('')}</select></label>`;
   const inp=(k,t,ph)=>`<label class="f">${t}<input id="${pre}_${k}" value="${v(k)}"${ph?` placeholder="${ph}"`:''}${d}></label>`;
-  return `<div class="fields">${soConta?'':inp('nome','Nome do parceiro *')}
+  return `<div class="fields">${soConta?'':inp('nome','Nome local * (como no sistema do cliente)','Ex.: Dra Amanda Ribas- Mpa#')+inp('nome_global','Nome global (razão social)')}
     ${sel('pix_tipo','Tipo da chave Pix',PIXTIPOS)}${inp('pix_chave','Chave Pix')}
     ${inp('banco','Banco','Ex.: Sicredi')}${inp('agencia','Agência')}${inp('conta','Conta','com o dígito')}${sel('tipo_conta','Tipo de conta',TIPOSCONTA)}
     ${inp('titular','Titular da conta','se não for o próprio parceiro')}${inp('cpf_cnpj','CPF/CNPJ do titular')}
@@ -7533,8 +7558,9 @@ async function rpAcao(act,el){
     if(act==='copDesc')return copiar(descTxt(d),'Texto do desconto copiado');
     el.disabled=true;
     if(act==='salvar'){
-      const o=lerCampos('pc',['nome','obs',...CONTAK]);
-      if(!o.nome)return rpErr('Informe o nome do parceiro.');
+      const o=lerCampos('pc',['nome','nome_global','obs',...CONTAK]);
+      if(!o.nome)return rpErr('Informe o nome local do parceiro (como aparece no sistema do cliente).');
+      if(!('nome_global' in (p||PARC[0]||{nome_global:null})))delete o.nome_global;
       if((o.banco||o.agencia||o.conta)&&!temConta(o))return rpErr('Complete banco, agência e conta, ou deixe em branco e preencha depois.');
       if(p){if(e&&$('pc_ativo'))o.ativo=$('pc_ativo').checked;o.atualizado_em=new Date().toISOString();
         const {error}=await sb.from('parceiros').update(o).eq('id',p.id);if(error)throw error;return recarregar('Parceiro salvo')}
@@ -7591,6 +7617,19 @@ async function tEquipe(){
   const {data}=await sb.from('perfis').select('user_id,nome,email').eq('papel','escritorio').order('nome');
   return TEQUIPE=(data||[]).map(u=>({id:u.user_id,nome:u.nome||u.email}));
 }
+// pessoas para responsável/executor: a equipe da Controlacs e, na tarefa de empresa, os usuários dela
+async function tPessoas(cli){
+  if(!ehEsc())return [];
+  const d=await dirUsuarios(),eq=d.equipe.map(u=>({...u,g:'Equipe Controlacs'}));
+  return cli?[...eq,...d.porEmpresa(cli).map(u=>({...u,g:'Usuários da empresa'}))]:eq;
+}
+const nomeDe=(id,salvo)=>(DIRUS?.perfis.find(u=>u.user_id===id)&&DIRUS.nome(id))||salvo||'?';
+function selPessoa(id,pessoas,v,vazio,dis){
+  const gs=[...new Set(pessoas.map(p=>p.g))],opt=p=>`<option value="${p.id}"${p.id===v?' selected':''}>${esc(p.nome)}</option>`;
+  // quem já está na tarefa e não aparece mais na lista continua selecionado
+  const fora=v&&!pessoas.some(p=>p.id===v)?`<option value="${v}" selected>${esc(nomeDe(v))}</option>`:'';
+  return `<select id="${id}"${dis||''}><option value="">${vazio}</option>${fora}${gs.map(g=>`<optgroup label="${g}">${pessoas.filter(p=>p.g===g).map(opt).join('')}</optgroup>`).join('')}</select>`;
+}
 async function renderTarefas(){
   const e=ehEsc(),v=escCli.value,todas=v==='*';
   $('tSub').textContent=e?'Tarefas da equipe e recados com os clientes. Arraste o cartão para mudar de coluna; clique para abrir a conversa.'
@@ -7599,6 +7638,7 @@ async function renderTarefas(){
   $('tRespBox').hidden=!e;
   const vazio=(t,cl)=>{$('tBoard').innerHTML=`<p class="${cl||'muted'}">${t}</p>`;$('tAlerta').hidden=true;$('tNote').textContent=''};
   if(!v){vazio('Nenhuma empresa liberada para tarefas.');return}
+  if(window.V74===undefined){const {error:e74}=await sb.from('tarefas').select('executor').limit(1);window.V74=!e74}
   if(window.V31===undefined){const {error:e31}=await sb.from('tarefa_usuarios').select('tarefa_id').limit(1);window.V31=!e31}
   DIRUS=null;
   let q=sb.from('tarefas').select('*, tarefa_comentarios(count)'+(window.V31?', tarefa_usuarios(user_id)':'')).eq('arquivada',false).eq('tarefa_comentarios.sistema',false);
@@ -7607,20 +7647,21 @@ async function renderTarefas(){
   const conc=$('tConc').value;
   if(conc==='nao')q=q.neq('status','concluida');
   else if(conc==='30')q=q.or(`status.neq.concluida,concluida_em.gte.${new Date(Date.now()-30*864e5).toISOString()}`);
-  const [{data,error}]=await Promise.all([q.order('ordem'),tNovidades(),tEquipe()]);
+  const [{data,error}]=await Promise.all([q.order('ordem'),tNovidades(),tEquipe(),ehEsc()?dirUsuarios():null]);
   if(error){console.error(error);vazio(error.code==='42P01'||error.code==='PGRST205'||/tarefa/.test(error.message||'')?'Este módulo precisa da atualização v26 do banco. Rode o SQL no Supabase.':'Erro ao carregar. Verifique a internet e tente de novo.','neg');return}
   TAR=data||[];
-  // responsáveis: a equipe do escritório e quem já aparece nas tarefas
-  const rs=$('tResp'),rv=rs.value||'todos',nomes=new Map((TEQUIPE||[]).map(u=>[u.id,u.nome]));
-  TAR.forEach(t=>t.responsavel&&!nomes.has(t.responsavel)&&nomes.set(t.responsavel,t.responsavel_nome||'?'));
-  rs.innerHTML=`<option value="todos">Todos</option><option value="meus">Minhas tarefas</option><option value="sem">Sem responsável</option>`+[...nomes].map(([id,n])=>`<option value="${id}">${esc(n)}</option>`).join('');
+  // filtro por pessoa: a equipe do escritório e quem já é responsável ou executor nas tarefas
+  const rs=$('tResp'),rv=rs.value||'todos',nomes=new Map((TEQUIPE||[]).map(u=>[u.id,nomeDe(u.id,u.nome)]));
+  TAR.forEach(t=>{t.responsavel&&!nomes.has(t.responsavel)&&nomes.set(t.responsavel,nomeDe(t.responsavel,t.responsavel_nome));
+    t.executor&&!nomes.has(t.executor)&&nomes.set(t.executor,nomeDe(t.executor,t.executor_nome))});
+  rs.innerHTML=`<option value="todos">Todos</option><option value="meus">Minhas tarefas</option><option value="sem">Sem executor</option>`+[...nomes].sort((a,b)=>a[1].localeCompare(b[1])).map(([id,n])=>`<option value="${id}">${esc(n)}</option>`).join('');
   rs.value=[...rs.options].some(o=>o.value===rv)?rv:'todos';
   tDesenha();
 }
 function tFiltradas(){
   const busca=$('tBusca').value.trim().toLowerCase(),r=$('tResp').value;
   return TAR.filter(t=>(!busca||(t.titulo+' '+(t.descricao||'')).toLowerCase().includes(busca))
-    &&(!ehEsc()||r==='todos'||(r==='meus'?t.responsavel===ME.user_id:r==='sem'?!t.responsavel:t.responsavel===r)));
+    &&(!ehEsc()||r==='todos'||(r==='meus'?[t.responsavel,t.executor].includes(ME.user_id):r==='sem'?!t.executor:[t.responsavel,t.executor].includes(r))));
 }
 function tCard(t,todas){
   const nome=t.cliente_id?CLIENTES.find(c=>c.id===t.cliente_id)?.nome||'':'Interna',nv=TNOV[t.id],pr=TPRI[t.prioridade];
@@ -7630,7 +7671,8 @@ function tCard(t,todas){
     t.interna&&ehEsc()?'<span class="chip c-none" title="O cliente não vê">🔒 Interna</span>':'',
     ehEsc()&&t.tarefa_usuarios?.length?`<span class="chip c-warn" title="Só os usuários marcados veem">👥 ${t.tarefa_usuarios.length} ${t.tarefa_usuarios.length===1?'pessoa':'pessoas'}</span>`:''].join('');
   const meta=[t.prazo?`<span class="${late||hoje?'late':''}">📅 ${late?'Atrasada · ':hoje?'Hoje · ':''}${dBR(t.prazo).slice(0,5)}</span>`:'',
-    t.responsavel_nome?`<span>👤 ${esc(t.responsavel_nome)}</span>`:'',n?`<span>💬 ${n}</span>`:'',
+    t.executor?`<span title="Executor">🛠 ${esc(nomeDe(t.executor,t.executor_nome))}</span>`:'',
+    t.responsavel?`<span title="Responsável">👤 ${esc(nomeDe(t.responsavel,t.responsavel_nome))}</span>`:'',n?`<span>💬 ${n}</span>`:'',
     nv?`<span class="new">● ${nv.mensagens?nv.mensagens+(nv.mensagens===1?' mensagem nova':' mensagens novas'):'Nova'}</span>`:''].join('');
   return `<button type="button" class="kcard${nv?' novo':''}" data-id="${t.id}" draggable="${tLanca(t)}">${chips?`<div class="kchips">${chips}</div>`:''}<div class="t">${esc(t.titulo)}</div>${meta?`<div class="m">${meta}</div>`:''}</button>`;
 }
@@ -7674,7 +7716,7 @@ $('tBoard').addEventListener('drop',async e=>{
 });
 const dlgTar=$('dlgTar');
 async function abrirTarefa(t){
-  TARDLG=t;const e=ehEsc(),pode=t?tLanca(t):true,equipe=await tEquipe();
+  TARDLG=t;const e=ehEsc(),pode=t?tLanca(t):true;
   $('tdTitle').textContent=t?t.titulo:'Nova tarefa';
   $('tdChip').innerHTML=t?(t.cliente_id?`<span class="chip c-done">${esc(CLIENTES.find(c=>c.id===t.cliente_id)?.nome||'')}</span>`:'')+(t.interna&&e?'<span class="chip c-none">🔒 Interna</span>':''):'';
   const d=pode?'':' disabled',sel=(id,ops,v)=>`<select id="${id}"${d}>${ops.map(([k,n])=>`<option value="${k}"${k===v?' selected':''}>${esc(n)}</option>`).join('')}</select>`;
@@ -7686,10 +7728,12 @@ async function abrirTarefa(t){
     <label class="f">Coluna${sel('td_status',TCOLS,t?.status||'afazer')}</label>
     <label class="f">Prioridade${sel('td_pri',Object.entries(TPRI).map(([k,v])=>[k,v[1]]),t?.prioridade||'normal')}</label>
     <label class="f">Prazo<input type="date" id="td_prazo" value="${t?.prazo||''}"${d}></label>
-    ${e?`<label class="f">Responsável${sel('td_resp',[['','Ninguém'],...equipe.map(u=>[u.id,u.nome])],t?t.responsavel||'':ME.user_id)}</label>`:''}</div>
+    ${e?'<label class="f">Responsável (acompanha)<span id="td_respBox"></span></label><label class="f">Executor (quem faz)<span id="td_execBox"></span></label>'
+      :t&&(t.responsavel||t.executor)?`<p class="note wide" style="margin:0">${t.executor?'Executor: <b>'+esc(t.executor_nome||'')+'</b>':''}${t.responsavel&&t.executor?' · ':''}${t.responsavel?'Responsável: <b>'+esc(t.responsavel_nome||'')+'</b>':''}</p>`:''}
+    <p class="note wide" style="margin:0">Cadastrada por <b>${esc(t?nomeDe(t.criado_por,t.criado_por_nome):nomeDe(ME.user_id,ME.nome||ME.email))}</b>${t?' em '+dtBR(t.criado_em):''}${t?.concluida_em?' · concluída em '+dtBR(t.concluida_em):''}</p></div>
     ${e&&window.V31?'<div id="td_visBox"></div>':''}
     ${e?`<label style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px" id="td_intBox"><input type="checkbox" id="td_int" style="width:auto"${t?.interna?' checked':''}> Tarefa interna (o cliente não vê)</label>`:''}
-    ${t?`<p class="note" style="margin:0">Aberta por ${esc(t.criado_por_nome||'?')} em ${dtBR(t.criado_em)}${t.concluida_em?' · concluída em '+dtBR(t.concluida_em):''}</p>`:''}`;
+`;
   if(t)h+=`<div><h3 style="margin-bottom:6px">Conversa</h3><div class="conv" id="td_conv"><p class="note">Carregando…</p></div>
     ${pode?`<div style="display:grid;gap:8px;margin-top:10px"><textarea id="td_msg" rows="2" placeholder="Escreva uma mensagem"></textarea>
       <div class="row" style="gap:10px;align-items:center"><input type="file" id="td_file" accept="image/*,application/pdf" style="max-width:260px" aria-label="Anexar foto ou PDF">
@@ -7701,6 +7745,12 @@ async function abrirTarefa(t){
   $('tdFoot').innerHTML=(e&&t?b('excluir','Excluir','ghost')+b('arquivar','Arquivar','ghost'):'')+'<span class="spacer"></span>'+b('fechar','Fechar','ghost')+(pode?b('salvar',t?'Salvar':'Criar tarefa','primary'):'');
   const ic=$('td_cli'),ib=$('td_intBox');if(ic&&ib){const f=()=>ib.hidden=!ic.value;ic.onchange=f;f()}
   if(t&&!t.cliente_id&&ib)ib.hidden=true;
+  // responsável e executor: escolhidos pelo nome entre a equipe e os usuários da empresa da tarefa
+  if($('td_respBox')){
+    const pessoas=async()=>{const cli=t?t.cliente_id:$('td_cli')?.value,ps=await tPessoas(cli),rv=$('td_resp')?.value??(t?t.responsavel||'':ME.user_id),xv=$('td_exec')?.value??(t?.executor||'');
+      $('td_respBox').innerHTML=selPessoa('td_resp',ps,rv,'Ninguém',d);$('td_execBox').innerHTML=selPessoa('td_exec',ps,xv,'Ninguém ainda',d)};
+    if(ic)ic.addEventListener('change',pessoas);await pessoas();
+  }
   if($('td_visBox')){
     const marc=(t?.tarefa_usuarios||[]).map(x=>x.user_id);
     // a lista vale para a equipe e, nas tarefas de empresa que não são internas, para os usuários do cliente
@@ -7711,7 +7761,7 @@ async function abrirTarefa(t){
       const rest=box.querySelector('input[name="td_vis"]:checked')?.value??(marc.length?'marcados':'todos');
       box.innerHTML=`<div class="f"><span>Quem vê esta tarefa</span><div class="vis"><label><input type="radio" name="td_vis" value="todos"${rest==='todos'?' checked':''}> ${interna?'Toda a equipe':'Todos (a equipe e os usuários da empresa)'}</label><label><input type="radio" name="td_vis" value="marcados"${rest==='marcados'?' checked':''}> Só os usuários marcados</label></div></div>
         <div id="td_pickBox"${rest==='marcados'?'':' hidden'}>${gs.length?pickUsers('td_pick',gs,marc):'<p class="note" style="margin:0">Ainda não há outros usuários para marcar. Cadastre em Configurações › Empresas e usuários.</p>'}
-        <p class="note" style="margin:6px 0 0">${adm?esc(adm)+' (administração), ':''}quem abriu a tarefa e o responsável sempre veem.</p></div>`;
+        <p class="note" style="margin:6px 0 0">${adm?esc(adm)+' (administração), ':''}quem cadastrou, o responsável e o executor sempre veem.</p></div>`;
       box.querySelectorAll('input[name="td_vis"]').forEach(r=>r.onchange=()=>$('td_pickBox').hidden=r.value!=='marcados'||!r.checked)};
     if(ic)ic.addEventListener('change',vis);if($('td_int'))$('td_int').addEventListener('change',vis);vis();
   }
@@ -7742,7 +7792,7 @@ async function tAcao(act,btn){
     if(act==='salvar'){
       const titulo=$('td_titulo').value.trim();if(!titulo)return tdErr('Informe o título da tarefa.');
       const r={titulo,descricao:$('td_desc').value.trim()||null,status:$('td_status').value,prioridade:$('td_pri').value,prazo:$('td_prazo').value||null};
-      if(e){r.responsavel=$('td_resp').value||null;r.interna=!!$('td_int')?.checked}
+      if(e){r.responsavel=$('td_resp').value||null;r.interna=!!$('td_int')?.checked;if(window.V74)r.executor=$('td_exec').value||null}
       const restrito=e&&$('td_visBox')?.querySelector('input[name="td_vis"]:checked')?.value==='marcados',quem=restrito?pickLer('td_pick'):[];
       if(restrito&&!quem.length)return tdErr('Marque pelo menos um usuário que pode ver a tarefa, ou escolha a opção de todos.');
       if(!t){const c=$('td_cli').value||null;if(!c&&!e)return tdErr('Escolha a empresa.');r.cliente_id=c;
