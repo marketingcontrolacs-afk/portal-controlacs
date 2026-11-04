@@ -8546,6 +8546,10 @@ $('avFiltro').onchange=renderAvisos;
 // Para avisar uma atualização nova, acrescente no COMEÇO da lista. para: 'esc' só o escritório; mods: só quem vê algum desses módulos.
 // =====================================================================
 const NOVIDADES=[
+  {k:'2026-11-03r',data:'2026-11-03',t:'Repasse de parceiros: separar, pagar e avisos',itens:[
+    {x:'Repasse de parceiros: os botões “Pagar em …” do alto já criam a conta a pagar na empresa escolhida, e a coluna “Pagar em” passa a só mostrar a empresa. Trocar a empresa de um repasse ainda não pago leva a conta a pagar para a empresa nova.',para:'esc'},
+    {x:'Repasse de parceiros: novo filtro Situação (Falta pagar, Em aberto, Atrasados, Pagos, Conciliados) e quadro “Falta pagar”, que filtra ao clicar.',para:'esc'},
+    {x:'Repasse de parceiros: ao importar o relatório aparece um aviso com os parceiros que têm alteração de conta (vermelho) ou desconto a fazer (amarelo, com o valor a pagar já descontado e o botão “Desconto feito”). Filtro “Com desconto a fazer”.',para:'esc'}]},
   {k:'2026-11-03p',data:'2026-11-03',t:'Parceiros: um cadastro só para todas as empresas',itens:[
     {x:'Comunicação › Parceiros: cada parceiro tem agora um cadastro só, que vale para todas as empresas (antes a planilha tinha criado uma cópia em cada empresa). Os nomes locais de cada empresa ficam guardados no mesmo cadastro.',mods:['repasse']},
     {x:'Alterações de conta, descontos e o fornecedor ligado na Gestão financeira passaram para o cadastro único; uma conta diferente que existia numa cópia ficou na Observação como “Outra conta”. O portal não deixa mais cadastrar o mesmo CPF/CNPJ ou o mesmo nome duas vezes.',para:'esc'}]},
