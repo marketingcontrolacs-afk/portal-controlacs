@@ -332,6 +332,10 @@ main{padding-block:26px 64px}
 h1{font-size:28px;letter-spacing:-.02em}
 .card{border-color:var(--line);box-shadow:var(--sh1)}
 .tiles{gap:14px}
+/* esconder/mostrar os quadros de resumo em todas as telas (Carol, 13/11) */
+.tiles.tiles-min{display:none!important}
+.tiles-tg{display:flex;justify-content:flex-end;margin:10px 0 -6px}
+.tiles-tg:has(+ .tiles:empty),.tiles-tg:has(+ .tiles[hidden]){display:none}
 .tile{padding:16px 18px;border-radius:var(--r)}
 .tile .k{font-size:11.5px;letter-spacing:.07em}
 .tile .v{font-size:25px;letter-spacing:-.01em}
@@ -559,6 +563,12 @@ input.bxsel{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3
 .msmenu label:hover{background:var(--bg)}
 .msmenu input{width:auto;margin:0}
 .msmenu .msfoot{display:flex;justify-content:space-between;gap:8px;border-top:1px solid var(--line);margin-top:4px;padding:6px 4px 2px}
+/* AVISO DE VERSÃO NOVA (13/11): faixa no alto quando o portal foi atualizado no servidor */
+#novaVersao{position:fixed;left:50%;right:auto;bottom:auto;top:calc(10px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:200;margin:0;width:min(620px,calc(100vw - 32px));background:var(--warn-soft);color:var(--ink);border:2px solid var(--amber);border-radius:12px;box-shadow:var(--sh2);padding:12px 14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;font:500 14.5px var(--body)}
+#novaVersao[popover]:not(:popover-open){display:none}
+#novaVersao .nvvt{flex:1 1 260px;min-width:0}#novaVersao .nvvt b{display:block;font-size:15.5px;margin-bottom:2px}
+#novaVersao .nvvb{display:flex;gap:8px;flex-wrap:wrap}
+#novaVersao .btn.pri{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
 </style>
 </head>
 <body>
@@ -4269,6 +4279,14 @@ const hhmm=min=>{min=Math.round(min||0);const s=min<0?'-':'';min=Math.abs(min);r
 const lerHoras=s=>{s=String(s||'').trim().replace(/h$/i,'');if(!s)return null;let m=s.match(/^(\d+)\s*[:hH]\s*(\d{1,2})$/);if(m)return +m[1]*60+ +m[2];
   m=s.replace(',','.').match(/^\d+(\.\d+)?$/);return m?Math.round(+m[0]*60):NaN};
 const pctTxt=v=>Math.round(v*1000)/10+'%';
+// competência sugerida para as contas (Carol, 13/11): segue o que o histórico da categoria mostra (ex.: salário vence no
+// mês seguinte ao da competência); sem histórico, folha e impostos (salário, FGTS, INSS, IRRF, DAS…) são do mês anterior ao vencimento
+const COMPANT=/sal[aá]rio|folha|fgts|inss|irrf|pr[oó].?labore|\bgps\b|\bdas\b|simples nacional|\biss\b|\bpis\b|cofins|encargos|f[eé]rias|rescis|d[eé]cimo|13[ºo°]? sal|contribui[cç][aã]o sindical|pens[aã]o aliment/i;
+function compSugerida(cat,venc,lista,menos){if(!venc||!/^\d{4}-\d{2}/.test(venc))return '';
+  const h=(lista||[]).filter(t=>t.id!==menos&&cat&&t.categoria===cat&&t.competencia&&t.vencimento&&!t.previsto).sort((a,b)=>b.vencimento.localeCompare(a.vencimento))[0];
+  let off=cat&&COMPANT.test(cat)?-1:0;
+  if(h){const m=x=>+x.slice(0,4)*12+ +x.slice(5,7),d=m(h.competencia)-m(h.vencimento);if(d>=-12&&d<=1)off=d}
+  return addMes(venc,off).slice(0,7)}
 const addMes=(comp,n)=>{const d=new Date(comp.slice(0,7)+'-01T12:00');d.setMonth(d.getMonth()+n);return isoLocal(d)};
 const fimMes=comp=>{const d=new Date(comp+'T12:00');d.setMonth(d.getMonth()+1,0);return isoLocal(d)};
 const colsDe=cli=>(cli.folha_colunas&&cli.folha_colunas.length?cli.folha_colunas:FPADRAO).filter(c=>FCOL[c]);
@@ -7220,6 +7238,8 @@ const somaMes=(iso,n)=>{const [y,m,d]=iso.split('-').map(Number),u=new Date(y,m-
 // ícones de pago e conciliado nas listas (Carol, 05/11)
 const stIc=(pg,cc,P=true)=>`<span class="stic"><b class="${pg?'on':''}" title="${pg?(P?'Pago':'Recebido'):(P?'Não pago':'Não recebido')}">$</b><b class="${cc?'on':''}" title="${cc?'Conciliado com o extrato do banco':'Não conciliado'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></b></span>`;
 const movConc=m=>!!(m.ofx_id||m.conciliado);
+// conta criada pela conciliação com vários lançamentos do banco somados (Lançar juntas): mostra quantos e deixa detalhar (Carol, 13/11)
+const gtJuntos=t=>t.origem==='ofx'&&+((String(t.descricao||'').match(/\((\d+) lançamentos\)$/)||[])[1]||0);
 const gtConc=t=>{const ms=GT.movs[t.id]||[];return ms.length>0&&ms.every(movConc)};
 function gtSit(t){const pg=GT.pago[t.id]||0,sd=r2(t.valor-pg);
   if(sd<=0.004)return ['c-done',t.tipo==='pagar'?'✓ Pago':'✓ Recebido','baixada'];
@@ -7291,7 +7311,7 @@ async function gtBoletos(cli){
   const {data,error}=await sb.from('contas_pagar').select('*').eq('cliente_id',cli.id).eq('conferido',false).order('vencimento');
   if(error||cliAtual()?.id!==cli.id||VIEW!=='gfpagar')return;
   const ja=new Set(GT.lista.map(t=>t.origem_id).filter(Boolean)),novos=(data||[]).filter(r=>!ja.has(r.id));
-  GT.boletos=novos;$('gtImp').hidden=!novos.length;
+  GT.boletos=novos;$('gtImp').hidden=false;   // sempre à vista, mesmo com 0, para saber onde olhar (Carol, 13/11)
   $('gtImp').textContent=`Boletos e notas do cliente para validar (${novos.length})`;$('gtImp').classList.toggle('primary',!!novos.length);
 }
 // Boletos e notas enviados pelo cliente: o escritório confere cada um e escolhe se vira conta nova ou se vai para uma conta
@@ -7353,7 +7373,7 @@ function bolDesenha(){
   BOL.it.forEach((x,i)=>{const s=document.querySelector(`[data-boldest="${i}"]`);if(s)s.value=x.dest||'nova'});
 }
 $('gtImp').onclick=async()=>{
-  const cli=cliAtual(),ls=GT.boletos||[];if(!cli||!ls.length)return;
+  const cli=cliAtual(),ls=GT.boletos||[];if(!cli)return;if(!ls.length)return toast('Nenhum boleto ou nota do cliente esperando validação nesta empresa.');
   $('gtImp').disabled=true;
   try{
     const pes=await gfPessoasDe(cli.id,'fornecedor');
@@ -7455,7 +7475,7 @@ function gtTabela(rows,vazio){
   const vis=new Set(rows.map(t=>t.id));GT.sel.forEach(id=>{if(!vis.has(id))GT.sel.delete(id)});GT.tabRows=rows;
   const todosSel=rows.length&&rows.every(t=>GT.sel.has(t.id));
   $('gtHead').innerHTML=`<tr><th style="width:34px"><input type="checkbox" id="gtTodos" title="Selecionar todas as ${rows.length} contas do filtro"${todosSel?' checked':''}></th><th>Vencimento</th>${MV?'<th class="l">Tipo</th>':''}<th class="l">${MV?'Fornecedor ou cliente':P?'Fornecedor':'Cliente'}</th><th class="l">Descrição</th><th class="l">Documento</th><th>Parcela</th><th>Valor</th><th>${MV?'Pago ou recebido':P?'Pago':'Recebido'}</th><th>Falta</th><th class="l">Situação</th></tr>`;
-  $('gtBody').innerHTML=rows.map(t=>{const s=gtSit(t),sl=GT.sel.has(t.id);return `<tr class="click${sl?' sel':''}" data-id="${t.id}" tabindex="0"><td><input type="checkbox" data-gtsel="${t.id}"${sl?' checked':''} aria-label="Selecionar"></td><td>${dBR(t.vencimento)}</td>${MV?`<td class="l"><span class="${t.tipo==='pagar'?'neg':'pos'}">${t.tipo==='pagar'?'A pagar':'A receber'}</span></td>`:''}<td class="l"><b>${esc(t.pessoa_nome||'')||mu('—')}</b>${GT.todasE?`<br><span class="chip c-done">${esc(CLIENTES.find(c=>c.id===t.cliente_id)?.nome||'')}</span>`:''}</td><td class="l">${esc(t.descricao||'')||mu('—')}${t.categoria?`<br>${mu(esc(t.categoria))}`:''}</td><td class="l">${esc(t.documento||'')||mu('—')}${faClip(t.id)}${t.origem==='boleto_cliente'?`<br>${mu('enviado pelo cliente')}`:''}</td><td>${t.parcelas>1?t.parcela+'/'+t.parcelas:mu('—')}</td><td>${fm(t.valor)}</td><td>${GT.pago[t.id]?fm(GT.pago[t.id]):mu('—')}</td><td>${fm(gtFalta(t))}</td><td class="l">${stIc(s[2]==='baixada',gtConc(t),t.tipo==='pagar')}<span class="chip ${s[0]}">${s[1]}</span>${t.previsto&&s[2]!=='baixada'?`<br><span class="chip c-warn" title="${esc(t.obs||'Conta prevista pelo histórico')}">${prevTxt(t)}</span>`:''}${(it=>it&&s[2]!=='baixada'&&it.status!=='excluido'?`<br><span class="chip ${RMSTATUS[it.status][0]}" title="${esc(it.ocorrencia?'Banco: '+ocorTxt(it.ocorrencia.split(' ')):'')}">${RMSTATUS[it.status][1]}</span>`:'')(GT.rem?.[t.id])}</td></tr>`}).join('')
+  $('gtBody').innerHTML=rows.map(t=>{const s=gtSit(t),sl=GT.sel.has(t.id);return `<tr class="click${sl?' sel':''}" data-id="${t.id}" tabindex="0"><td><input type="checkbox" data-gtsel="${t.id}"${sl?' checked':''} aria-label="Selecionar"></td><td>${dBR(t.vencimento)}</td>${MV?`<td class="l"><span class="${t.tipo==='pagar'?'neg':'pos'}">${t.tipo==='pagar'?'A pagar':'A receber'}</span></td>`:''}<td class="l"><b>${esc(t.pessoa_nome||'')||mu('—')}</b>${GT.todasE?`<br><span class="chip c-done">${esc(CLIENTES.find(c=>c.id===t.cliente_id)?.nome||'')}</span>`:''}</td><td class="l">${esc(t.descricao||'')||mu('—')}${t.categoria?`<br>${mu(esc(t.categoria))}`:''}${gtJuntos(t)?`<br><span class="chip c-done" title="Clique para abrir e detalhar">🔗 ${gtJuntos(t)} lançamentos juntos · detalhar</span>`:''}</td><td class="l">${esc(t.documento||'')||mu('—')}${faClip(t.id)}${t.origem==='boleto_cliente'?`<br>${mu('enviado pelo cliente')}`:''}</td><td>${t.parcelas>1?t.parcela+'/'+t.parcelas:mu('—')}</td><td>${fm(t.valor)}</td><td>${GT.pago[t.id]?fm(GT.pago[t.id]):mu('—')}</td><td>${fm(gtFalta(t))}</td><td class="l">${stIc(s[2]==='baixada',gtConc(t),t.tipo==='pagar')}<span class="chip ${s[0]}">${s[1]}</span>${t.previsto&&s[2]!=='baixada'?`<br><span class="chip c-warn" title="${esc(t.obs||'Conta prevista pelo histórico')}">${prevTxt(t)}</span>`:''}${(it=>it&&s[2]!=='baixada'&&it.status!=='excluido'?`<br><span class="chip ${RMSTATUS[it.status][0]}" title="${esc(it.ocorrencia?'Banco: '+ocorTxt(it.ocorrencia.split(' ')):'')}">${RMSTATUS[it.status][1]}</span>`:'')(GT.rem?.[t.id])}</td></tr>`}).join('')
     ||`<tr><td class="l muted" colspan="${MV?11:10}">${vazio}</td></tr>`;
   const sv=k=>r2(rows.reduce((x,t)=>x+k(t),0));
   $('gtFoot').innerHTML=rows.length&&!MV?`<tr><td></td><td></td><td class="l">${rows.length} ${rows.length===1?'conta':'contas'}</td><td></td><td></td><td></td><td>${fm(sv(t=>+t.valor))}</td><td>${fm(sv(t=>GT.pago[t.id]||0))}</td><td>${fm(sv(gtFalta))}</td><td></td></tr>`
@@ -7469,8 +7489,10 @@ async function concLigar(ms,perguntar=true){
   ms=ms.filter(m=>!movConc(m));if(!ms.length)return {lig:0,man:0};
   const usados=new Set(),sem=[];let lig=0,man=0;
   for(const m of ms){const v=(m.tipo==='entrada'?1:-1)*(+m.valor);
-    let ls=[];try{const {data,error}=await sb.from('fin_ofx').select('id,data,valor,ignorado').eq('conta_id',m.conta_id).gte('data',addDias(m.data,-7)).lte('data',addDias(m.data,7)).gte('valor',r2(v-0.005)).lte('valor',r2(v+0.005));if(error)throw error;ls=(data||[]).filter(l=>!l.ignorado&&!usados.has(l.id))}catch(e){console.error(e)}
+    let ls=[];try{const {data,error}=await sb.from('fin_ofx').select('id,data,valor,ignorado,junto_mov').eq('conta_id',m.conta_id).gte('data',addDias(m.data,-7)).lte('data',addDias(m.data,7)).gte('valor',r2(v-0.005)).lte('valor',r2(v+0.005));if(error)throw error;ls=(data||[]).filter(l=>!l.ignorado&&!usados.has(l.id))}catch(e){console.error(e)}
     if(ls.length){const {data:lk}=await sb.from('fin_movimentos').select('ofx_id').in('ofx_id',ls.map(l=>l.id));const ja=new Set((lk||[]).map(x=>x.ofx_id));ls=ls.filter(l=>!ja.has(l.id))}
+    const jm=ls.filter(l=>l.junto_mov).map(l=>l.junto_mov);if(jm.length){const {data:jk}=await sb.from('fin_movimentos').select('id').in('id',jm).not('ofx_id','is',null);const jok=new Set((jk||[]).map(x=>x.id));ls=ls.filter(l=>!jok.has(l.junto_mov))}   // já entrou num lançamento somado
+    if(ls.length){const {data:sk}=await sb.from('fin_movimentos').select('ofx_soma').in('ofx_soma',ls.map(l=>l.id)).eq('conciliado',true);const sok=new Set((sk||[]).map(x=>x.ofx_soma));ls=ls.filter(l=>!sok.has(l.id))}   // já é a soma de vários lançamentos
     const dd=l=>Math.abs(new Date(l.data)-new Date(m.data)),l=ls.sort((a,b)=>dd(a)-dd(b))[0];
     if(l){const {error}=await sb.from('fin_movimentos').update({ofx_id:l.id,conciliado:true}).eq('id',m.id);if(error)throw error;usados.add(l.id);lig++}else sem.push(m)}
   if(sem.length&&(!perguntar||confirm(`${sem.length===1?'Não achei a linha':'Não achei as linhas'} do extrato importado para ${sem.length} ${sem.length===1?'lançamento':'lançamentos'} (mesma conta, mesmo valor, até 7 dias).\n\nMarcar como conciliado mesmo assim? (OK = marcar, Cancelar = deixar sem conciliar)`))){
@@ -7495,11 +7517,13 @@ $('gtBulk').addEventListener('click',async e=>{const b=e.target.closest('[data-g
 async function gtLote(a,lsIn){
   const ls=lsIn||gtSelRows(),movsDe=t=>GT.movs[t.id]||[];
   if(a==='estornar'){const com=ls.filter(t=>movsDe(t).length),ms=com.flatMap(movsDe),cc=ms.filter(movConc).length;if(!com.length)return;
-    if(!confirm(`Estornar ${com.length===1?'a conta selecionada':'as '+com.length+' contas selecionadas'}?\n\nOs pagamentos e recebimentos (${ms.length}) saem do extrato, o saldo das contas muda e as contas voltam a ficar em aberto.`+(cc?`\nA conciliação com o extrato do banco também será desfeita em ${cc} ${cc===1?'lançamento':'lançamentos'} (as linhas voltam a ficar pendentes na Conciliação bancária).`:'')))return;
+    if(!confirm(`Estornar ${com.length===1?'a conta selecionada':'as '+com.length+' contas selecionadas'}?\n\nOs pagamentos e recebimentos (${ms.length}) saem do extrato, o saldo das contas muda e as contas voltam a ficar em aberto.`+(com.some(t=>t.origem==='ofx')?`\nAs contas criadas pela Conciliação bancária saem das contas a pagar e a receber (a linha do banco volta para a conciliação).`:'')+(cc?`\nA conciliação com o extrato do banco também será desfeita em ${cc} ${cc===1?'lançamento':'lançamentos'} (as linhas voltam a ficar pendentes na Conciliação bancária).`:'')))return;
     const tr=[...new Set(ms.filter(m=>m.transf_id).map(m=>m.transf_id))],ids=ms.filter(m=>!m.transf_id).map(m=>m.id);
     for(let i=0;i<ids.length;i+=200){const {error}=await sb.from('fin_movimentos').delete().in('id',ids.slice(i,i+200));if(error)throw error}
     for(let i=0;i<tr.length;i+=200){const {error}=await sb.from('fin_movimentos').delete().in('transf_id',tr.slice(i,i+200));if(error)throw error}
     const org=com.filter(t=>t.origem_id).map(t=>t.origem_id);if(org.length){const {error}=await sb.from('contas_pagar').update({conferido:false,pago_em:null}).in('id',org);if(error)console.error(error)}
+    // conta que a própria conciliação criou: estornada, sai também das contas a pagar/receber e a linha volta para a conciliação (Carol, 13/11)
+    const doOfx=com.filter(t=>t.origem==='ofx').map(t=>t.id);for(let i=0;i<doOfx.length;i+=200){const {error}=await sb.from('fin_titulos').delete().in('id',doOfx.slice(i,i+200));if(error)console.error(error)}
     toast(com.length===1?'Conta estornada':com.length+' contas estornadas')}
   else if(a==='conc'){const ms=ls.flatMap(movsDe).filter(m=>!movConc(m));if(!ms.length)return;
     if(!confirm(`Conciliar ${ms.length} ${ms.length===1?'pagamento ou recebimento':'pagamentos ou recebimentos'}?\n\nCada um é ligado à linha do extrato já importado (mesma conta, mesmo valor, até 7 dias). Os que não tiverem linha no extrato: o portal pergunta antes de marcar.`))return;
@@ -7860,6 +7884,7 @@ async function gtLeArquivo(f){
   poe('gt_valor',dup?.valor||r.valor,'valor',fm,true);
   poe('gt_vencimento',dup?.venc||r.venc,'vencimento',dBR);
   poe('gt_documento',r.numero||r.nfe?.numero,r.modelo==='65'?'cupom nº':'NF nº');
+  if(r.emissao&&$('gt_competencia')?.dataset.auto==='1')$('gt_competencia').value='';   // a emissão da nota manda na competência sugerida
   if(r.emissao)poe('gt_competencia',r.emissao.slice(0,7),'competência',v=>v.split('-').reverse().join('/'));
   if(r.xml&&r.pix&&!$('gt_forma').value){$('gt_forma').value='Pix';$('gt_forma').dispatchEvent(new Event('change',{bubbles:true}))}
   // fornecedor pelo CNPJ (do XML, da chave da nota ou o primeiro CNPJ do arquivo que não seja o da empresa)
@@ -8036,6 +8061,8 @@ async function abrirGT(t,tipo,pre){
   if(trava)h+=`<div class="alerta" style="margin:0;display:block"><b>🔒 ${movs.some(movConc)?(P?'Pago e conciliado':'Recebido e conciliado'):(P?'Pago':'Recebido')}: para editar, estorne ${movs.length>1?(P?'os pagamentos':'os recebimentos'):(P?'o pagamento':'o recebimento')}.</b> Use <b>Estornar</b> em ${P?'Pagamentos':'Recebimentos'}, embaixo.${movs.some(movConc)?' A conciliação com o extrato do banco também é desfeita.':''}${revCat?' A categoria pode ser corrigida, porque está marcada para revisar.':''}</div>`;
   if(t?.previsto)h+=`<label class="alerta" style="margin:0;display:flex;gap:8px;align-items:center"><input type="checkbox" id="gt_prevok" style="width:auto"> <span><b>Conta prevista pelo histórico.</b> ${esc(t.obs||'')} Marque quando o boleto ou a nota chegar e o valor estiver conferido (colar a linha digitável também tira o alerta).</span></label>`;
   if(t?.origem_id)h+=`<div id="gtDocs" class="note" style="margin:0">Documentos enviados pelo cliente: carregando…</div>`;
+  const ofxIds=movs.map(m=>m.ofx_id).filter(Boolean);
+  if(t?.origem==='ofx'&&ofxIds.length)h+=`<details id="gtJunto" style="margin:0;background:var(--sunk);padding:10px 12px;border-radius:10px"${gtJuntos(t)?'':' hidden'}><summary style="cursor:pointer"><b>🔗 Detalhar</b>: ver os lançamentos do banco que estão juntos neste</summary><div id="gtJuntoBody" class="note" style="margin-top:8px">Carregando…</div></details>`;
   // todas as parcelas do lançamento, como no Bom Controle (Carol, 04/11)
   const irmasP=t?.grupo_id?GT.lista.filter(x=>x.grupo_id===t.grupo_id).sort((a,b)=>a.parcela-b.parcela):[];
   if(irmasP.length>1)h+=`<details><summary style="cursor:pointer"><b>Parcelas deste lançamento (${irmasP.length})</b></summary><div class="tablebox" style="margin:6px 0 0;max-height:260px"><table><thead><tr><th>Parcela</th><th>Vencimento</th><th>Valor</th><th class="l">Situação</th></tr></thead><tbody>${irmasP.map(x=>{const s=gtSit(x);return `<tr${x.id===t.id?' style="font-weight:700"':''}><td>${x.parcela}/${x.parcelas}</td><td>${dBR(x.vencimento)}</td><td>${fm(x.valor)}</td><td class="l"><span class="chip ${s[0]}">${s[1]}</span></td></tr>`}).join('')}</tbody></table></div></details>`;
@@ -8087,6 +8114,13 @@ async function abrirGT(t,tipo,pre){
     $('gj_data').addEventListener('change',()=>dMan=true);$('gj_conta').addEventListener('change',()=>cMan=true);
     ['gt_vencimento','gt_conta_id','gt_parcelas'].forEach(k=>{$(k).addEventListener('change',jp);$(k).addEventListener('input',jp)});jp()}
   if(!dlgGT.open)dlgGT.showModal();if(!t)$('gt_pessoa').focus();
+  // competência já vem preenchida pela categoria e pelo vencimento; quem digitar manda (Carol, 13/11)
+  {const cp=$('gt_competencia');if(cp&&!cp.disabled){const sug=()=>{if(cp.value&&cp.dataset.auto!=='1')return;const v=compSugerida($('gt_categoria')?.value,$('gt_vencimento')?.value,GT.lista,t?.id);if(v){cp.value=v;cp.dataset.auto='1'}};
+    cp.addEventListener('input',()=>{cp.dataset.auto=''});['gt_categoria','gt_vencimento'].forEach(k=>$(k)?.addEventListener('change',sug));sug()}}
+  if($('gtJunto')){const mids=movs.map(m=>m.id),q=[ofxIds.length?`id.in.(${ofxIds.join(',')})`:'',`junto_mov.in.(${mids.join(',')})`].filter(Boolean).join(',');
+    sb.from('fin_ofx').select('id,data,valor,memo,nome,qtd,itens,junto_mov').or(q).order('data').order('valor').then(({data,error})=>{const b=$('gtJuntoBody');if(!b)return;if(error){console.error(error);b.textContent='Não foi possível carregar os lançamentos do banco.';return}
+      const ls=(data||[]).filter(l=>ofxIds.includes(l.id)||mids.includes(l.junto_mov)),n=ls.reduce((a,l)=>a+(l.qtd>1?l.qtd:1),0);$('gtJunto').hidden=n<2;
+      b.innerHTML=`<table class="tbl" style="width:100%"><tbody>${ls.map(l=>`<tr><td>${dBR(l.data)}</td><td class="l">${esc(histDe(l))}${l.qtd>1?`<br><span class="muted">${(l.itens||[]).map(x=>fm(Math.abs(x.v))).join(' + ')}</span>`:''}</td><td>${fm(Math.abs(l.valor))}</td></tr>`).join('')}</tbody></table><p class="note" style="margin:6px 0 0">${n} ${n===1?'lançamento':'lançamentos'} do banco · total ${fm(Math.abs(r2(ls.reduce((a,l)=>a+(+l.valor),0))))}</p>`})}
   faInit(cli,t?[t.id]:null,t?.grupo_id?GT.lista.filter(x=>x.grupo_id===t.grupo_id).map(x=>x.id):[]);
   if(t?.origem_id){
     const {data}=await sb.from('documentos').select('*').eq('registro_id',t.origem_id);const urls=await signed((data||[]).map(d=>d.caminho));
@@ -8208,9 +8242,10 @@ async function gtAcao(a,b){
     dlgGT.close();GT.key='';renderGT();
   }else if(a==='desfaz'){
     const mv=(GT.movs[t.id]||[]).find(x=>x.id===b.dataset.id);
-    if(!confirm('Confirmar o estorno '+(P?'do pagamento':'do recebimento')+'?\n\nO saldo da conta muda e o lançamento volta a ficar em aberto. Ele sai também do extrato da conta.'+(mv&&movConc(mv)?'\nA conciliação com o extrato do banco também será desfeita (a linha volta a ficar pendente na Conciliação bancária).':'')))return;   // pagamento de fatura: sai também a entrada no cartão
+    if(!confirm('Confirmar o estorno '+(P?'do pagamento':'do recebimento')+'?\n\nO saldo da conta muda e o lançamento volta a ficar em aberto. Ele sai também do extrato da conta.'+(t.origem==='ofx'?'\nEsta conta foi criada pela Conciliação bancária: ela sai das contas a '+(P?'pagar':'receber')+' e a linha do banco volta para a conciliação.':'')+(mv&&movConc(mv)?'\nA conciliação com o extrato do banco também será desfeita (a linha volta a ficar pendente na Conciliação bancária).':'')))return;   // pagamento de fatura: sai também a entrada no cartão
     const {error}=mv?.transf_id?await sb.from('fin_movimentos').delete().eq('transf_id',mv.transf_id):await sb.from('fin_movimentos').delete().eq('id',b.dataset.id);if(error)return fail(error,'Não foi possível desfazer');
     if(t.origem_id){const {error:e2}=await sb.from('contas_pagar').update({conferido:false,pago_em:null}).eq('id',t.origem_id);if(e2)console.error(e2)}
+    if(t.origem==='ofx'&&(GT.movs[t.id]||[]).length<=1){const {error:e3}=await sb.from('fin_titulos').delete().eq('id',t.id);if(e3)console.error(e3)}   // criada pela conciliação: sai junto (Carol, 13/11)
     toast('Estornado');dlgGT.close();GT.key='';renderGT();
   }else if(a==='apagar'){
     if((GT.movs[t.id]||[]).length)return gtErr(`Desfaça ${P?'os pagamentos':'os recebimentos'} antes de apagar.`);
@@ -10773,9 +10808,12 @@ async function renderGC(recarrega=true){
 }
 // linhas do extrato ainda não validadas, de todas as contas e de qualquer data: ficam pendentes até validar ou ignorar (Carol, 04/11)
 async function gcPendCarrega(cli){
-  const [ls,ms]=await Promise.all([todas(()=>sb.from('fin_ofx').select('id,conta_id,data,ignorado').eq('cliente_id',cli.id)),
-    todas(()=>sb.from('fin_movimentos').select('ofx_id').eq('cliente_id',cli.id).not('ofx_id','is',null))]);
-  const conc=new Set(ms.map(m=>m.ofx_id));GC.pend={};GC.concIds=conc;GC.todasL=ls;
+  const [ls,ms]=await Promise.all([todas(()=>sb.from('fin_ofx').select('id,conta_id,data,ignorado,junto_mov').eq('cliente_id',cli.id)),
+    todas(()=>sb.from('fin_movimentos').select('id,ofx_id').eq('cliente_id',cli.id).not('ofx_id','is',null))]);
+  const conc=new Set(ms.map(m=>m.ofx_id)),movC=new Set(ms.map(m=>m.id));
+  try{(await todas(()=>sb.from('fin_movimentos').select('ofx_soma').eq('cliente_id',cli.id).eq('conciliado',true).not('ofx_soma','is',null))).forEach(m=>conc.add(m.ofx_soma))}catch(e){console.error(e)}   // linha do banco = soma de vários lançamentos
+  ls.forEach(l=>{if(l.junto_mov&&movC.has(l.junto_mov))conc.add(l.id)});   // linha que entrou somada num lançamento só (Lançar juntas)
+  GC.pend={};GC.concIds=conc;GC.todasL=ls;
   ls.forEach(l=>{if(!l.ignorado&&!conc.has(l.id))(GC.pend[l.conta_id]||=[]).push(l)});
 }
 // aviso das pendentes fora do período ou em outra conta, e a lista dos extratos importados
@@ -10800,11 +10838,18 @@ function gcVerPend(cid){const ds=(GC.pend[cid]||[]).map(l=>l.data).sort();if(!ds
 // uma passada só, para duas linhas não ficarem com o mesmo lançamento ou a mesma conta
 function gcSugestoes(){
   GC.conc={};GC.movs.forEach(m=>{if(m.ofx_id)GC.conc[m.ofx_id]=m});GC.sug={};
+  // linhas lançadas juntas: ficam conciliadas pelo lançamento único com a soma (Carol, 13/11)
+  const movPor={};GC.movs.forEach(m=>movPor[m.id]=m);
+  GC.linhas.forEach(l=>{const m=l.junto_mov&&movPor[l.junto_mov];if(m&&m.ofx_id&&!GC.conc[l.id])GC.conc[l.id]=m});
+  GC.juntoQ={};GC.linhas.forEach(l=>{const m=GC.conc[l.id];if(m)GC.juntoQ[m.id]=(GC.juntoQ[m.id]||0)+1});
+  // uma linha do banco que é a soma de vários lançamentos do sistema (ex.: remessa de repasses) (Carol, 13/11)
+  GC.soma={};GC.movs.forEach(m=>{if(m.ofx_soma&&m.conciliado)(GC.soma[m.ofx_soma]||=[]).push(m)});
+  Object.entries(GC.soma).forEach(([id,ms])=>{if(!GC.conc[id])GC.conc[id]=ms[0]});
   const usadosM=new Set(),usadosT=new Set();
   for(const l of GC.linhas){if(GC.conc[l.id]||l.ignorado)continue;
     const tipo=l.valor>0?'entrada':'saida',v=Math.abs(l.valor),perto=(a,b)=>Math.abs(difDias(a,l.data))-Math.abs(difDias(b,l.data));
-    const m=GC.movs.filter(x=>!x.ofx_id&&!usadosM.has(x.id)&&x.tipo===tipo&&Math.abs(x.valor-v)<0.005&&Math.abs(difDias(x.data,l.data))<=3).sort((a,b)=>perto(a.data,b.data))[0];
-    if(m){usadosM.add(m.id);GC.sug[l.id]={k:'mov',mov:m,txt:`Já lançado: ${m.descricao||m.pessoa_nome||'lançamento'} (${dBR(m.data)})`};continue}
+    const m=GC.movs.filter(x=>!x.ofx_id&&!(x.ofx_soma&&x.conciliado)&&!usadosM.has(x.id)&&x.tipo===tipo&&Math.abs(x.valor-v)<0.005&&Math.abs(difDias(x.data,l.data))<=3).sort((a,b)=>perto(a.data,b.data))[0];
+    if(m){usadosM.add(m.id);GC.sug[l.id]={k:'mov',mov:m,txt:`Já lançado: ${[m.pessoa_nome,m.descricao].filter(Boolean).join(' · ')||'lançamento'} (${dBR(m.data)})`};continue}
     const t=GC.tits.filter(x=>!usadosT.has(x.id)&&x.tipo===(tipo==='saida'?'pagar':'receber')&&Math.abs(r2(x.valor-(GC.pago[x.id]||0))-v)<0.005&&Math.abs(difDias(x.vencimento,l.data))<=10).sort((a,b)=>perto(a.vencimento,b.vencimento))[0];
     if(t){usadosT.add(t.id);GC.sug[l.id]={k:'tit',tit:t,txt:`${t.tipo==='pagar'?'Pagar':'Receber'}: ${t.pessoa_nome||''}${t.descricao?' · '+t.descricao:''} (venc. ${dBR(t.vencimento)})`};continue}
     const r=GC.regras.filter(x=>x.tipo===tipo&&l.padrao&&l.padrao.includes(x.padrao)).sort((a,b)=>b.padrao.length-a.padrao.length)[0];
@@ -10814,7 +10859,7 @@ function gcSugestoes(){
 const gcSit=l=>GC.conc[l.id]?'conc':l.ignorado?'ign':GC.sug[l.id]?'sug':'sem';
 // texto da coluna "Lançamento no sistema", para o filtro da coluna
 const gcLancTxt=l=>{const s=gcSit(l),m=GC.conc[l.id],g=GC.sug[l.id];
-  return s==='conc'?['Conciliada',m.descricao,m.pessoa_nome,m.categoria].filter(Boolean).join(' '):s==='ign'?'Ignorada':s==='sug'?'Sugestão '+g.txt:'Sem lançamento'};
+  return s==='conc'?['Conciliada',m.descricao,m.pessoa_nome,m.categoria,...(GC.soma?.[l.id]||[]).map(x=>(x.pessoa_nome||'')+' '+(x.descricao||''))].filter(Boolean).join(' '):s==='ign'?'Ignorada':s==='sug'?'Sugestão '+g.txt:'Sem lançamento'};
 const soDigV=t=>String(t||'').replace(/[^\d]/g,'');
 function gcFiltradas(){
   const F=msVals('gcFiltro'),q=chave($('gcBusca').value),fd=$('gcfData').value.trim(),fh=chave($('gcfHist').value),fv=soDigV($('gcfValor').value),fl=chave($('gcfLanc').value);
@@ -10831,7 +10876,7 @@ function gcDesenha(){
   const ok=a=>`<button type="button" class="btn small" data-gc="${a}">`;
   $('gcHead').hidden=false;$('gcTodas').checked=!!rows.length&&rows.every(l=>GC.sel.has(l.id));
   $('gcBody').innerHTML=rows.slice(0,MAX).map(l=>{const s=gcSit(l),m=GC.conc[l.id],g=GC.sug[l.id];
-    const cel=s==='conc'?`<span class="chip c-ok">✓ Conciliada</span> ${esc(m.descricao||m.pessoa_nome||'')}${m.categoria?' '+mu('· '+esc(m.categoria)):''}`
+    const cel=s==='conc'?`<span class="chip c-ok">✓ Conciliada</span> ${m.pessoa_nome&&m.descricao?`<b>${esc(m.pessoa_nome)}</b> · `:''}${esc(m.descricao||m.pessoa_nome||'')}${m.categoria?' '+mu('· '+esc(m.categoria)):''}${(GC.juntoQ?.[m.id]||0)>1?' '+mu(`· lançamento único de ${fm(m.valor)} somando ${GC.juntoQ[m.id]} linhas`):''}${GC.soma?.[l.id]?' '+mu(`· soma de ${GC.soma[l.id].length} lançamentos do sistema (${fm(r2(GC.soma[l.id].reduce((a,x)=>a+(+x.valor),0)))})`):''}`
       :s==='ign'?'<span class="chip c-none">Ignorada</span>'
       :s==='sug'?`<span class="chip c-warn">Sugestão</span> ${esc(g.txt)}`:'<span class="chip c-bad">Sem lançamento</span>';
     const acts=s==='conc'?`${ok('desfaz')}Desfazer</button>`:s==='ign'?`${ok('volta')}Voltar</button>`
@@ -10885,7 +10930,8 @@ async function gcInserir(rows){
   const tits=[],pes=await gfPessoasTodas(rows[0]?.cliente_id).catch(()=>[]);
   for(const m of rows){if(m.titulo_id||m.transf_id||!m.ofx_id)continue;const id=crypto.randomUUID(),pk=pessoaChave(m.pessoa_nome),p=pk&&pes.find(x=>pessoaChave(x.nome)===pk||pessoaChave(x.fantasia)===pk);
     tits.push({id,cliente_id:m.cliente_id,tipo:m.tipo==='entrada'?'receber':'pagar',pessoa_id:p?.id||null,pessoa_nome:m.pessoa_nome||null,descricao:m.descricao||null,documento:m.documento||null,categoria:m.categoria||null,
-      competencia:m.data,vencimento:m.data,valor:m.valor,parcela:1,parcelas:1,conta_id:m.conta_id,origem:'ofx'});m.titulo_id=id}
+      competencia:m.data,vencimento:m.data,valor:m.valor,parcela:1,parcelas:1,conta_id:m.conta_id,origem:'ofx',
+      obs:(q=>q?`${q} lançamentos do banco juntos num só. Abra e clique em Detalhar para ver cada um.`:null)((String(m.descricao||'').match(/\((\d+) lançamentos\)$/)||[])[1])});m.titulo_id=id}
   const feitos=[];
   try{for(let i=0;i<tits.length;i+=500){const pt=tits.slice(i,i+500),{error}=await sb.from('fin_titulos').insert(pt);if(error)throw error;feitos.push(...pt.map(t=>t.id))}}
   catch(e){console.error(e);if(feitos.length)await sb.from('fin_titulos').delete().in('id',feitos);const ids=new Set(tits.map(t=>t.id));rows.forEach(m=>{if(ids.has(m.titulo_id))m.titulo_id=null});feitos.length=0}   // sem a conta, o lançamento fica avulso
@@ -10910,20 +10956,26 @@ async function gcAprovar(ls){
 }
 async function gcDesfazer(l){
   const m=GC.conc[l.id];if(!m)return;
+  const sm=GC.soma?.[l.id];
+  if(sm){if(!confirm(`Desfazer a ligação desta linha do banco com os ${sm.length} lançamentos do sistema? Os lançamentos continuam no sistema, só ficam sem conciliar.`))return;
+    const {error}=await sb.from('fin_movimentos').update({ofx_soma:null,conciliado:false}).eq('ofx_soma',l.id);if(error)throw error;sm.forEach(x=>{x.ofx_soma=null;x.conciliado=false});return}
   if(m.titulo_id){const {data:t}=await sb.from('fin_titulos').select('id,origem').eq('id',m.titulo_id).maybeSingle();
     if(t?.origem==='ofx'){   // conta a pagar/receber que a própria conciliação criou
       if(confirm('Apagar o lançamento ligado a esta linha? Ele sai também das contas a '+(m.tipo==='saida'?'pagar':'receber')+', da Movimentação e do Extrato da conta.\n\nOK = apagar\nCancelar = só desfazer a ligação (o lançamento continua)')){
         const {error}=await sb.from('fin_titulos').delete().eq('id',t.id);if(error)throw error;GC.movs=GC.movs.filter(x=>x.id!==m.id)}
-      else{const {error}=await sb.from('fin_movimentos').update({ofx_id:null,conciliado:false}).eq('id',m.id);if(error)throw error;m.ofx_id=null}
+      else{const {error}=await sb.from('fin_movimentos').update({ofx_id:null,conciliado:false}).eq('id',m.id);if(error)throw error;m.ofx_id=null;await gcSoltaJuntas(m)}
       return}}
   const apaga=!m.titulo_id?confirm('Apagar também o lançamento ligado a esta linha?\n\nOK = apagar o lançamento\nCancelar = só desfazer a ligação (o lançamento continua no extrato da conta)'):confirm('Desfazer a baixa da conta a '+(m.tipo==='saida'?'pagar':'receber')+' feita por esta linha? A conta volta a ficar em aberto.');
   if(apaga){const {error}=m.transf_id?await sb.from('fin_movimentos').delete().eq('transf_id',m.transf_id):await sb.from('fin_movimentos').delete().eq('id',m.id);if(error)throw error;
     GC.movs=GC.movs.filter(x=>x.id!==m.id&&!(m.transf_id&&x.transf_id===m.transf_id));
     if(m.titulo_id){GC.pago[m.titulo_id]=r2((GC.pago[m.titulo_id]||0)-abat(m));const t=GC.tits.find(x=>x.id===m.titulo_id);
       if(!t){const {data}=await sb.from('fin_titulos').select('*').eq('id',m.titulo_id).maybeSingle();if(data){GC.tits.push(data);if(data.origem_id)await sb.from('contas_pagar').update({conferido:false,pago_em:null}).eq('id',data.origem_id)}}}}
-  else if(!m.titulo_id){const {error}=await sb.from('fin_movimentos').update({ofx_id:null,conciliado:false}).eq('id',m.id);if(error)throw error;m.ofx_id=null}
+  else if(!m.titulo_id){const {error}=await sb.from('fin_movimentos').update({ofx_id:null,conciliado:false}).eq('id',m.id);if(error)throw error;m.ofx_id=null;await gcSoltaJuntas(m)}
   else return;
 }
+// desfeita a ligação do lançamento somado, as outras linhas lançadas juntas voltam a ficar pendentes
+async function gcSoltaJuntas(m){if(!GC.linhas.some(l=>l.junto_mov===m.id))return;
+  const {error}=await sb.from('fin_ofx').update({junto_mov:null}).eq('junto_mov',m.id);if(error)throw error;GC.linhas.forEach(l=>{if(l.junto_mov===m.id)l.junto_mov=null})}
 // importar o arquivo OFX
 // - confere o banco do arquivo com a conta (o extrato do PagBank não entra mais no Inter)
 // - soma as linhas do mesmo dia com o mesmo histórico numa linha só, com a quantidade
@@ -10950,8 +11002,12 @@ $('gcArq').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f|
   const ds=o.linhas.map(l=>l.data).sort(),d0=ds[0],d1=ds[ds.length-1];
   toast('Conferindo o que já foi importado…');
   let exist=[],conc=new Set(),arqAnt=null;
-  try{exist=await todas(()=>sb.from('fin_ofx').select('id,chave,valor,qtd,itens,fitid,ignorado').eq('conta_id',c.id).gte('data',d0).lte('data',d1));
+  try{exist=await todas(()=>sb.from('fin_ofx').select('id,chave,valor,qtd,itens,fitid,ignorado,junto_mov').eq('conta_id',c.id).gte('data',d0).lte('data',d1));
     const ids=exist.map(x=>x.id);for(let i=0;i<ids.length;i+=200){const {data,error}=await sb.from('fin_movimentos').select('ofx_id').in('ofx_id',ids.slice(i,i+200));if(error)throw error;(data||[]).forEach(m=>conc.add(m.ofx_id))}
+    const jm=[...new Set(exist.filter(x=>x.junto_mov).map(x=>x.junto_mov))],jok=new Set();   // linhas lançadas juntas num lançamento só
+    for(let i=0;i<jm.length;i+=200){const {data,error}=await sb.from('fin_movimentos').select('id').in('id',jm.slice(i,i+200)).not('ofx_id','is',null);if(error)throw error;(data||[]).forEach(m=>jok.add(m.id))}
+    exist.forEach(x=>{if(x.junto_mov&&jok.has(x.junto_mov))conc.add(x.id)});
+    for(let i=0;i<ids.length;i+=200){const {data,error}=await sb.from('fin_movimentos').select('ofx_soma').in('ofx_soma',ids.slice(i,i+200)).eq('conciliado',true);if(!error)(data||[]).forEach(m=>conc.add(m.ofx_soma))}   // soma de vários lançamentos
     const ra=await sb.from('fin_ofx_arquivos').select('*').eq('conta_id',c.id).lte('ini',d1).gte('fim',d0).order('importado_em',{ascending:false}).limit(1);if(!ra.error)arqAnt=(ra.data||[])[0]||null;
   }catch(err){console.error(err);return toast(v47(err)?v47Msg:'Não foi possível conferir o extrato. Verifique a internet e tente de novo.')}
   const docDe=h=>(h.match(/(?<!\d)(\d{14}|\d{11})(?!\d)/)||[])[1]||null;
@@ -10997,12 +11053,20 @@ async function abrirGC(ls){
   const cats=plano.filter(x=>x.ativo!==false).map(x=>x.categoria);outras=outras.filter(x=>x.id!==c.id);
   const tits=um?GC.tits.filter(t=>t.tipo===(tipo==='saida'?'pagar':'receber')).sort((a,b)=>Math.abs(r2(a.valor-(GC.pago[a.id]||0))-tot)-Math.abs(r2(b.valor-(GC.pago[b.id]||0))-tot)||Math.abs(difDias(a.vencimento,l.data))-Math.abs(difDias(b.vencimento,l.data))).slice(0,30):[];
   const comum=ls.every(x=>x.padrao===l.padrao)?l.padrao:'';
+  // vários lançamentos do sistema para esta linha do banco (ex.: remessa de repasses que sai com o total) (Carol, 13/11)
+  const vls=um?GC.movs.filter(m=>m.tipo===tipo&&!movConc(m)&&!(m.ofx_soma&&m.conciliado)&&Math.abs(difDias(m.data,l.data))<=10).sort((a,b)=>Math.abs(difDias(a.data,l.data))-Math.abs(difDias(b.data,l.data))||String(a.pessoa_nome||'').localeCompare(String(b.pessoa_nome||''))):[];
+  // e também as contas em aberto (ex.: repasses da remessa ainda não baixados): ao conciliar, ficam pagas
+  const vts=um?GC.tits.filter(t=>t.tipo===(tipo==='saida'?'pagar':'receber')&&Math.abs(difDias(t.vencimento,l.data))<=10).sort((a,b)=>Math.abs(difDias(a.vencimento,l.data))-Math.abs(difDias(b.vencimento,l.data))||String(a.pessoa_nome||'').localeCompare(String(b.pessoa_nome||''))):[];
+  const falta=t=>r2(t.valor-(GC.pago[t.id]||0)),vit=[...vls.map(m=>({k:'m:'+m.id,d:m.data,p:m.pessoa_nome,ds:m.descricao,c:m.categoria,doc:m.documento,v:+m.valor,st:'lançado'})),...vts.map(t=>({k:'t:'+t.id,d:t.vencimento,p:t.pessoa_nome,ds:t.descricao,c:t.categoria,doc:t.documento,v:falta(t),st:'em aberto'}))];
   const doc=l.documento&&pes.find(p=>soDig(p.documento)===l.documento);
   $('gtdTitle').textContent=um?`${tipo==='entrada'?'Entrada':'Saída'} de ${fm(Math.abs(l.valor))} em ${dBR(l.data)}`:`${ls.length} ${tipo==='entrada'?'entradas':'saídas'} (${fm(tot)})`;$('gtdChip').innerHTML='';
-  $('gtdBody').innerHTML=`<p class="note" style="margin:0">${um?'Banco: '+esc(histDe(l)):'Mesmo lançamento para as '+ls.length+' linhas selecionadas.'}</p>
+  $('gtdBody').innerHTML=`<p class="note" style="margin:0">${um?'Banco: '+esc(histDe(l)):'As '+ls.length+' linhas selecionadas viram um lançamento só, com a soma'+(new Set(ls.map(x=>x.data)).size>1?' (um por dia)':'')+'. No Extrato da conta aparece uma linha só.'}</p>
     <datalist id="gcPesList">${pes.map(p=>`<option value="${esc(p.nome)}"></option>`).join('')}</datalist>
     <div class="fields">
-      <label class="f wide">O que é<select id="gc_modo"><option value="novo">Lançamento novo (${tipo==='entrada'?'receita':'despesa'}, tarifa, etc.)</option>${outras.length?`<option value="transf">Transferência ${tipo==='saida'?'para':'de'} outra conta (desta ou de outra empresa do grupo)</option>`:''}${tits.length?`<option value="tit">Baixa de uma conta a ${tipo==='saida'?'pagar':'receber'} em aberto</option>`:''}</select></label>
+      <label class="f wide">O que é<select id="gc_modo"><option value="novo">Lançamento novo (${tipo==='entrada'?'receita':'despesa'}, tarifa, etc.)</option>${outras.length?`<option value="transf">Transferência ${tipo==='saida'?'para':'de'} outra conta (desta ou de outra empresa do grupo)</option>`:''}${tits.length?`<option value="tit">Baixa de uma conta a ${tipo==='saida'?'pagar':'receber'} em aberto</option>`:''}${vit.length?`<option value="soma">Soma de vários lançamentos já feitos no sistema (ex.: remessa de repasses)</option>`:''}</select></label>
+      <div class="wide" id="gc_somaBox" hidden><div class="row" style="gap:8px;flex-wrap:wrap;align-items:center"><input id="gc_somaBusca" placeholder="Buscar por nome, descrição, data ou valor" style="flex:1 1 220px"><label style="display:flex;gap:6px;align-items:center;font-size:14px"><input type="checkbox" id="gc_somaTodos" style="width:auto"> Marcar os da lista</label></div>
+        <div style="max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:8px;margin-top:8px"><table class="tbl" style="width:100%"><tbody id="gc_somaLista">${vit.map(m=>`<tr data-v="${esc(chave([dBR(m.d),m.p,m.ds,m.c,m.doc,m.st,fm(m.v),String(m.v)].join(' ')))}"><td><input type="checkbox" class="gcsm" value="${m.k}" style="width:auto"></td><td>${dBR(m.d)}</td><td class="l">${esc(m.p||'')}${m.ds?`<br><span class="muted">${esc(m.ds)}</span>`:''}</td><td class="l">${esc(m.c||'')}</td><td>${fm(m.v)}</td><td><span class="chip ${m.st==='lançado'?'c-done':'c-warn'}">${m.st}</span></td></tr>`).join('')}</tbody></table></div>
+        <p class="note" id="gc_somaTot" style="margin:6px 0 0"></p></div>
       <label class="f wide" id="gc_titBox" hidden>Conta em aberto<select id="gc_tit">${tits.map(t=>`<option value="${t.id}">${esc(t.pessoa_nome||'')} · ${esc(t.descricao||'')} · venc. ${dBR(t.vencimento)} · falta ${fm(r2(t.valor-(GC.pago[t.id]||0)))}</option>`).join('')}</select></label>
       <label class="f" id="gc_destBox" hidden>Outra conta<select id="gc_dest">${optContas(outras,cli)}</select></label>
       <label class="f wide" id="gc_descBox">Descrição *<input id="gc_desc" value="${esc(um?(l.nome||l.memo||''):'')}"></label>
@@ -11011,14 +11075,29 @@ async function abrirGC(ls){
       <label class="wide" id="gc_lembraBox" style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="gc_lembra" style="width:auto"${comum?' checked':''}> Lembrar: as próximas linhas do banco com o texto</label>
       <label class="f wide" id="gc_padBox">Texto que identifica (pode encurtar)<input id="gc_pad" value="${esc(comum)}"></label>
     </div><p class="err" id="gtErr" hidden></p>`;
-  const modo=()=>{const v=$('gc_modo').value;$('gc_titBox').hidden=v!=='tit';$('gc_destBox').hidden=v!=='transf';$('gtdBody').querySelectorAll('[data-novo]').forEach(x=>x.hidden=v!=='novo');
-    $('gc_lembraBox').hidden=$('gc_padBox').hidden=$('gc_descBox').hidden=v==='tit';if(v==='transf'&&!$('gc_desc').value)$('gc_desc').value='Transferência entre contas'};
+  const somaTot=()=>{const b=$('gc_somaBox');if(!b)return;const t=r2([...b.querySelectorAll('.gcsm:checked')].reduce((a,x)=>a+vit.find(m=>m.k===x.value).v,0)),d=r2(tot-t);
+    $('gc_somaTot').innerHTML=`Marcados: <b>${b.querySelectorAll('.gcsm:checked').length}</b> · soma <b>${fm(t)}</b> · banco <b>${fm(tot)}</b> · ${Math.abs(d)<0.005?'<b class="pos">bate certinho</b>':`<b class="neg">${d>0?'faltam':'sobram'} ${fm(Math.abs(d))}</b>`}`};
+  if(vit.length){$('gc_somaLista').onchange=somaTot;
+    $('gc_somaBusca').oninput=()=>{const q=chave($('gc_somaBusca').value);$('gc_somaLista').querySelectorAll('tr').forEach(tr=>tr.hidden=!!q&&!tr.dataset.v.includes(q))};
+    $('gc_somaTodos').onchange=()=>{const on=$('gc_somaTodos').checked;$('gc_somaLista').querySelectorAll('tr').forEach(tr=>{if(!tr.hidden)tr.querySelector('.gcsm').checked=on});somaTot()};somaTot()}
+  const modo=()=>{const v=$('gc_modo').value;$('gc_titBox').hidden=v!=='tit';if($('gc_somaBox'))$('gc_somaBox').hidden=v!=='soma';$('gc_destBox').hidden=v!=='transf';$('gtdBody').querySelectorAll('[data-novo]').forEach(x=>x.hidden=v!=='novo');
+    $('gc_lembraBox').hidden=$('gc_padBox').hidden=$('gc_descBox').hidden=v==='tit'||v==='soma';if(v==='transf'&&!$('gc_desc').value)$('gc_desc').value='Transferência entre contas'};
   $('gc_modo').onchange=modo;modo();
   $('gtdFoot').innerHTML=`<span class="spacer"></span><button type="button" class="btn ghost" data-act="fechar">Fechar</button><button type="button" class="btn primary" data-act="gc_salvar">Salvar e conciliar</button>`;
   dlgGT.showModal();
 }
 async function gcSalvar(){
   const ls=GCDLG,l=ls[0],tipo=l.valor>0?'entrada':'saida',modo=$('gc_modo').value,cli=cliAtual();
+  if(modo==='soma'){const ks=[...$('gc_somaBox').querySelectorAll('.gcsm:checked')].map(x=>x.value);if(!ks.length)return gtErr('Marque os lançamentos do sistema que somam esta linha do banco.');
+    const ids=ks.filter(k=>k[0]==='m').map(k=>k.slice(2)),tids=ks.filter(k=>k[0]==='t').map(k=>k.slice(2)),ts=GC.tits.filter(t=>tids.includes(t.id)),falta=t=>r2(t.valor-(GC.pago[t.id]||0));
+    const t=r2(GC.movs.filter(m=>ids.includes(m.id)).reduce((a,m)=>a+(+m.valor),0)+ts.reduce((a,x)=>a+falta(x),0)),v=Math.abs(l.valor);
+    if(Math.abs(t-v)>=0.005&&!confirm(`A soma dos lançamentos marcados (${fm(t)}) é diferente do banco (${fm(v)}). Conciliar mesmo assim?`))return;
+    for(let i=0;i<ids.length;i+=200){const {error}=await sb.from('fin_movimentos').update({ofx_soma:l.id,conciliado:true}).in('id',ids.slice(i,i+200));if(error)return gtErr('Não foi possível salvar: '+(error.message||''))}
+    // contas em aberto marcadas: dá baixa na data do banco, cada uma com o seu valor, ligadas a esta linha
+    const novos=[];for(const x of ts)novos.push(...await pernasFatura(x,{...gcMov({...l,qtd:1,valor:(tipo==='saida'?-1:1)*falta(x)},{titulo_id:x.id,descricao:x.descricao||(tipo==='saida'?'Pagamento':'Recebimento'),pessoa_nome:x.pessoa_nome,documento:x.documento,categoria:x.categoria}),ofx_id:null,ofx_soma:l.id}));
+    if(novos.length)await gcInserir(novos);
+    for(const x of ts)if(x.origem_id){const {error}=await sb.from('contas_pagar').update({conferido:true,pago_em:l.data,banco:GC.conta.conta_bc||GC.conta.nome}).eq('id',x.origem_id);if(error)console.error(error)}
+    toast(`Linha conciliada com ${ks.length} ${ks.length===1?'lançamento':'lançamentos'}`);dlgGT.close();GC.sel.clear();return renderGC()}
   if(modo==='tit'){const t=GC.tits.find(x=>x.id===$('gc_tit').value),v=Math.abs(l.valor),falta=r2(t.valor-(GC.pago[t.id]||0));
     // diferença: a mais = juros/multa; a menos = desconto (a conta fica paga) ou pagamento parcial
     let juros=0,desconto=0;if(v>falta)juros=r2(v-falta);else if(v<falta&&confirm(`O banco mostra ${fm(v)} e falta ${fm(falta)} desta conta. Foi desconto? (OK = desconto, a conta fica quitada; Cancelar = pagamento parcial)`))desconto=r2(falta-v);
@@ -11030,10 +11109,15 @@ async function gcSalvar(){
     const lembra=$('gc_lembra').checked,pad=padraoDe($('gc_pad').value);
     if(lembra&&pad.length<4)return gtErr('Informe o texto que identifica estas linhas no extrato do banco.');
     if(lembra&&ls.some(x=>!(x.padrao||'').includes(pad)))return gtErr('O texto que identifica precisa aparecer em todas as linhas selecionadas.');
-    const novos=[];
-    for(const x of ls){if(dest){const tid=crypto.randomUUID(),b={descricao:desc,transf_id:tid};novos.push(gcMov(x,b),{...gcMov(x,b),cliente_id:cliDaConta(dest,cli.id),conta_id:dest,tipo:tipo==='saida'?'entrada':'saida',ofx_id:null,conciliado:false})}
-      else novos.push(gcMov(x,{descricao:desc,categoria:cat,pessoa_nome:pes,documento:x.documento}))}
+    // Lançar juntas: as linhas do mesmo dia viram UM lançamento só com a soma, ligado a todas elas (Carol, 13/11)
+    const novos=[],juntas=[],porDia=new Map();ls.forEach(x=>{if(!porDia.has(x.data))porDia.set(x.data,[]);porDia.get(x.data).push(x)});
+    for(const g of porDia.values()){const x0=g[0],mid=crypto.randomUUID(),docs=[...new Set(g.map(y=>y.documento||''))];
+      const x=g.length===1?x0:{...x0,valor:r2(g.reduce((a,y)=>a+(+y.valor),0)),qtd:g.reduce((a,y)=>a+(y.qtd||1),0)};
+      if(dest){const tid=crypto.randomUUID(),b={descricao:desc,transf_id:tid};novos.push({...gcMov(x,b),id:mid},{...gcMov(x,b),cliente_id:cliDaConta(dest,cli.id),conta_id:dest,tipo:tipo==='saida'?'entrada':'saida',ofx_id:null,conciliado:false})}
+      else novos.push({...gcMov(x,{descricao:desc,categoria:cat,pessoa_nome:pes,documento:docs.length===1?docs[0]||null:null}),id:mid});
+      if(g.length>1)juntas.push([mid,g.slice(1).map(y=>y.id)])}
     await gcInserir(novos);
+    for(const [mid,ids] of juntas){const {error}=await sb.from('fin_ofx').update({junto_mov:mid}).in('id',ids);if(error)throw error}
     if(lembra){const {error}=await sb.from('fin_conc_regras').upsert({cliente_id:cli.id,padrao:pad,tipo,descricao:desc,categoria:dest?null:cat,pessoa_nome:dest?null:pes,conta_destino:dest,usos:ls.length,atualizado_em:new Date().toISOString()},{onConflict:'cliente_id,padrao,tipo'});if(error)console.error(error)}
   }
   toast(ls.length>1?ls.length+' linhas conciliadas':'Linha conciliada');dlgGT.close();GC.sel.clear();renderGC();
@@ -12124,6 +12208,7 @@ const MANUAL=[
 <li><b>Empresa:</b> escolha a empresa no alto. Ela vale para todos os módulos e continua escolhida quando você troca de tela ou atualiza a página. Quem vê mais de uma empresa tem também a opção <b>Todas as empresas</b>, que soma os quadros de todas. Se houver <b>grupos de empresas</b> (Configurações › Cadastro de empresas), aparecem também as opções <b>Grupo: …</b>, que somam só as empresas do grupo; a matriz com filiais vira um grupo sozinha.</li>
 <li><b>Módulos:</b> Dashboard, Rotina diária, Gestão financeira, Contabilidade, RH, Comunicação e Configurações. Passe o mouse (ou clique) num módulo para abrir o painel com as telas, separadas em Dia a dia, Cadastros e Relatórios. Só aparecem os módulos e as telas que você tem liberados.</li>
 <li><b>Exportar e Imprimir:</b> nas telas com lista de lançamentos, o botão <b>Exportar</b> gera o arquivo em <b>Excel</b> ou <b>PDF</b> e o botão <b>Imprimir</b> abre a impressão. Sai só o que está na tela: filtre primeiro (situação, empresa, período, busca) e depois exporte. Os filtros usados aparecem no alto do relatório.</li>
+<li><b>Esconder o resumo:</b> nas telas com quadros de resumo no alto (totais, pendentes, conciliadas…), clique em <b>▲ Esconder resumo</b> para recolher os quadros e ver mais da lista. Para ver de novo, clique em <b>▼ Mostrar resumo</b>. O portal lembra a escolha de cada tela neste aparelho.</li>
 <li><b>Números vermelhos</b> ao lado de um módulo ou de uma tela mostram pendências, por exemplo conferências atrasadas ou novidades para ver.</li>
 <li>No canto direito aparece onde você está, por exemplo <i>Rotina diária › Caixa</i>.</li>
 <li><b>No celular:</b> o alto da tela fica mais compacto (logo, nome e Sair numa linha e a empresa logo abaixo). Os módulos ficam numa faixa que corre para o lado com o dedo. Nas janelas, o texto rola e os botões (como <b>Visualizei</b>, Salvar e Cancelar) ficam sempre fixos embaixo.</li>
@@ -12191,6 +12276,7 @@ const MANUAL=[
       txt:`<p>As contas da empresa: o que tem para pagar aos fornecedores e o que tem para receber dos clientes.</p>
 <ol>
 <li>Clique em <b>+ Nova conta a pagar</b> (ou <b>+ Nova conta a receber</b>). Preencha o fornecedor (ou cliente), a descrição, a categoria, o vencimento e o valor. Para dividir em parcelas mensais, informe o número de parcelas.</li>
+<li><b>Competência:</b> já vem preenchida. O portal segue como a mesma categoria foi lançada antes; sem histórico, folha e impostos (salário, FGTS, INSS, IRRF, DAS, férias, rescisão…) ficam com o <b>mês anterior</b> ao vencimento e o resto com o mês do vencimento. Dá para trocar. Ao anexar a nota fiscal, vale o mês da emissão.</li>
 <li>Quando a conta for paga, abra a conta e use <b>Registrar pagamento</b> (ou <b>Registrar recebimento</b>) com a data, a conta bancária e, se houver, juros ou desconto.</li>
 </ol>
 <ul>
@@ -12281,6 +12367,8 @@ const MANUAL=[
 <li>Escolha a <b>Conta</b> e clique em <b>Importar OFX</b>. O portal confere o banco do arquivo: se o extrato for de outro banco (ex.: um arquivo do PagBank com a conta Inter escolhida), ele avisa e oferece a conta certa.</li>
 <li>Os lançamentos do <b>mesmo dia</b> com o <b>mesmo histórico</b> do banco (ex.: <i>Vendas - Disponível PIX</i>, vendas no cartão) entram somados numa linha só, com a observação “R$ 10.000,00 = 10 lançamentos somados”. Passe o mouse na observação para ver os valores.</li>
 <li>Para cada linha: <b>Aprovar</b> a sugestão, <b>Lançar</b> (lançamento novo, transferência ou baixa de uma conta em aberto) ou <b>Ignorar</b>. Marque várias linhas para lançar ou aprovar de uma vez.</li>
+<li><b>Lançar juntas</b>: marque as linhas do mesmo tipo (ex.: CIELO ELO, MASTER e VISA do dia) e clique em <b>Lançar juntas</b>. O portal soma as linhas de cada dia e cria <b>um lançamento só</b> com a categoria escolhida, ligado a todas elas. No Extrato da conta aparece uma linha só com a soma. Se clicar em <b>Desfazer</b> numa delas, todas voltam a ficar pendentes. Nas Contas a pagar ou a receber esse lançamento aparece uma vez só, com a etiqueta “🔗 N lançamentos juntos”; abra e clique em <b>Detalhar</b> para ver cada lançamento do banco que está dentro.</li>
+<li><b>Uma linha do banco = vários lançamentos do sistema</b> (ex.: a remessa de repasses sai no extrato do Sicredi numa linha só com o total, e no sistema cada repasse é um lançamento): clique em <b>Lançar</b> na linha do banco e escolha <b>Soma de vários lançamentos já feitos no sistema</b>. Marque os lançamentos (dá para buscar e marcar todos da lista); aparecem os já lançados e as contas em aberto (estas ficam pagas na data do banco). O portal mostra a soma e se bate com o banco. Os lançamentos continuam um por um no sistema, todos ligados àquela linha.</li>
 <li>O que você validar aparece também nas <b>Contas a receber</b> (entradas) ou nas <b>Contas a pagar</b> (saídas), já baixado, na <b>Movimentação financeira</b> e no <b>Extrato da conta</b>, onde dá para corrigir e conferir o saldo com o banco.</li>
 </ol>
 <ul>
@@ -12560,6 +12648,21 @@ const NOVIDADES=[
   {k:'2026-11-13boleto-valor-previsto',data:'2026-11-13',t:'Boleto com valor diferente do previsto',itens:[
     {x:'Boletos e notas a pagar: em “📎 Enviar boleto” (Contas do mês), ao anexar o boleto em PDF, o sistema lê o valor. Se for diferente do previsto, aparece o aviso “O valor do boleto anexado é diferente do valor previsto” para você confirmar o valor novo.',mods:['pagar']},
     {x:'Contas a pagar: ao validar o boleto do cliente ou ao anexar o boleto na conta, o sistema avisa quando o valor do boleto é diferente do previsto. Ao confirmar, atualiza o valor desta conta e pergunta “Deseja alterar também as contas futuras?” (próximas contas previstas do mesmo fornecedor e categoria, que ainda vão vencer, sem boleto e sem pagamento). As vencidas e não quitadas nunca mudam sozinhas. Vale para todas as empresas.',para:'esc'}]},
+  {k:'2026-11-13aviso-versao-nova',data:'2026-11-13',t:'Aviso quando sair versão nova do sistema',itens:[
+    {x:'Quando o sistema for atualizado, aparece no alto da tela a faixa “🔄 Saiu uma versão nova do sistema” com o botão “Atualizar agora”. Clique nele (salve antes o que estiver fazendo) e a página recarrega já na versão nova. Não precisa mais apertar Ctrl+F5. “Depois” esconde o aviso por 30 minutos.'}]},
+  {k:'2026-11-13bol-validar-sempre',data:'2026-11-13',t:'Boletos e notas do cliente: botão sempre à vista',itens:[
+    {x:'Gestão financeira › Contas a pagar: o botão “Boletos e notas do cliente para validar (N)” agora aparece sempre no alto, mesmo quando não há nada novo (fica com 0). Quando o cliente envia boleto ou nota em Rotina diária › Boletos e notas fiscais a pagar, o número sobe e o botão fica verde.',para:'esc'}]},
+  {k:'2026-11-13competencia',data:'2026-11-13',t:'Competência já preenchida nas contas a pagar',itens:[
+    {x:'Gestão financeira › Contas a pagar e a receber: a Competência já vem preenchida. O portal olha como a mesma categoria foi lançada antes; sem histórico, folha e impostos (salário, FGTS, INSS, IRRF, DAS, férias, rescisão…) ficam com o mês anterior ao vencimento e o resto com o mês do vencimento. As contas previstas também vêm preenchidas ao abrir. Dá para trocar; ao anexar a nota fiscal, vale o mês da emissão.',para:'esc'}]},
+  {k:'2026-11-13estorno-conc',data:'2026-11-13',t:'Estorno de conta criada pela conciliação',itens:[
+    {x:'Contas a pagar e a receber: ao estornar uma conta que a própria Conciliação bancária criou, ela sai das contas a pagar/receber (não fica mais como vencida) e a linha do banco volta para a conciliação.',para:'esc'}]},
+  {k:'2026-11-13esconder-resumo',data:'2026-11-13',t:'Esconder os quadros de resumo em todas as telas',itens:[
+    {x:'Em todas as telas com quadros de resumo no alto (Dashboard, Contas a pagar e a receber, Conciliação bancária, Extrato da conta, Notas fiscais, RH e outras), há o botão “▲ Esconder resumo”. Os quadros recolhem e sobra mais espaço para a lista; “▼ Mostrar resumo” traz de volta. A escolha fica guardada para cada tela neste aparelho.'}]},
+  {k:'2026-11-13lancar-juntas-soma',data:'2026-11-13',t:'Lançar juntas soma num lançamento só',itens:[
+    {x:'Gestão financeira › Conciliação bancária: “Lançar juntas” agora soma as linhas selecionadas do mesmo dia e cria um lançamento só (mesma categoria, mesma conta), ligado a todas elas. No Extrato da conta aparece uma linha com a soma, em vez de um CIELO por linha.',para:'esc'},
+    {x:'Contas a pagar e a receber: o lançamento que juntou várias linhas do banco aparece uma vez só, com a etiqueta “🔗 N lançamentos juntos”. Abra e clique em “Detalhar” para ver cada lançamento do banco (data, histórico e valor) que está dentro.',para:'esc'},
+    {x:'Conciliação bancária: a sugestão “Já lançado” e a linha conciliada mostram o nome do parceiro, fornecedor ou cliente antes da descrição (ex.: “Dr. Fulano · Repasse de parceiro (restituição)…”), para facilitar a conferência do repasse.',para:'esc'},
+    {x:'Conciliação bancária: uma linha do banco pode ser ligada a vários lançamentos do sistema. Em “Lançar”, escolha “Soma de vários lançamentos já feitos no sistema” e marque os lançamentos (ex.: os repasses de uma remessa que o banco mostra num total só).',para:'esc'}]},
   {k:'2026-11-12grupos-empresas',data:'2026-11-12',t:'Filiais e grupos de empresas',itens:[
     {x:'Configurações › Cadastro de empresas: nova coluna “Filial de”. Na filial, escolha a matriz; deixe em branco na matriz e nas empresas sem filial. A matriz que tem filial já aparece como grupo “Matriz + filiais”.',para:'esc'},
     {x:'Configurações › Cadastro de empresas › Grupos de empresas: crie grupos (ex.: Oliveira, Pato Branco, Campos Souto e MAR) e marque as empresas de cada um. Uma empresa pode estar em mais de um grupo.',para:'esc'},
@@ -14329,9 +14432,70 @@ $('nfdFoot').addEventListener('click',async e=>{const b=e.target.closest('[data-
   }catch(x){console.error(x);err((v93(x)?v93Msg:'Não foi possível salvar: '+(x.message||x))+(feitos?` (${feitos} já ${feitos===1?'foi marcada':'foram marcadas'})`:''))}
   finally{b.disabled=false;nfDesenha();nfPgDesenha()}
 },true);
+// quadros de resumo (.tiles) de todas as telas: setinha para esconder ou mostrar, lembrada neste aparelho (Carol, 13/11).
+// O Repasse da semana já tem o seu “Esconder valores” (rnTiles) e continua igual.
+const TMINK='ctl_tiles_min';
+const tilesMin=()=>{try{return new Set(JSON.parse(localStorage.getItem(TMINK)||'[]'))}catch(e){return new Set()}};
+function tilesTg(el){if(el.dataset.tg||el.id==='rnTiles')return;el.dataset.tg='1';
+  const p=el.parentElement?.closest('[id]'),k=el.id||(p?p.id:'tela')+':'+[...(p||document).querySelectorAll('.tiles')].indexOf(el);
+  const box=document.createElement('div');box.className='tiles-tg';box.innerHTML='<button type="button" class="btn small ghost"></button>';el.before(box);
+  const b=box.firstChild,ap=()=>{const min=tilesMin().has(k);el.classList.toggle('tiles-min',min);b.textContent=min?'▼ Mostrar resumo':'▲ Esconder resumo';b.title=min?'Mostra os quadros de resumo':'Esconde os quadros de resumo para sobrar mais espaço na tela'};
+  b.onclick=()=>{const s=tilesMin();s.has(k)?s.delete(k):s.add(k);try{localStorage.setItem(TMINK,JSON.stringify([...s]))}catch(e){}ap()};ap()}
+document.querySelectorAll('.tiles').forEach(tilesTg);
+new MutationObserver(ms=>{for(const m of ms)for(const n of m.addedNodes){if(n.nodeType!==1||n.tagName==='TR'||n.tagName==='TD'||n.tagName==='OPTION')continue;
+  if(n.classList.contains('tiles'))tilesTg(n);if(n.getElementsByClassName('tiles').length)[...n.getElementsByClassName('tiles')].forEach(tilesTg)}}).observe(document.body,{childList:true,subtree:true});
 // período no modelo do Bom Controle em todas as telas com De/Até
 [['escIni','escFim'],['exIni','exFim'],['mIni','mFim'],['gtIni','gtFim',{vazio:true}],['relIni','relFim'],['gxIni','gxFim'],['gcIni','gcFim']].forEach(([a,b,o])=>perLigar(a,b,o));
 boot();
+})();
+</script>
+<!-- AVISO DE VERSÃO NOVA (Carol, 13/11): o portal confere sozinho, de tempos em tempos, se foi publicada uma versão nova
+     (compara a "impressão digital" do index.html no servidor, a ETag do Netlify). Se mudou, mostra esta faixa com "Atualizar agora",
+     que recarrega sem usar a cópia guardada no navegador (o mesmo que Ctrl+F5). Não precisa mexer em nada a cada atualização. -->
+<div id="novaVersao" role="alert" hidden>
+  <div class="nvvt"><b>🔄 Saiu uma versão nova do sistema</b>Clique em “Atualizar agora” para usar a versão mais recente. Se estiver no meio de um lançamento, salve antes.</div>
+  <div class="nvvb"><button type="button" class="btn pri" id="nvvAtualizar">Atualizar agora</button><button type="button" class="btn" id="nvvDepois">Depois</button></div>
+</div>
+<script>
+(function(){
+  const box=document.getElementById('novaVersao');
+  // popover fica por cima até das janelas abertas; navegador antigo usa a faixa comum
+  const temPop=typeof box.showPopover==='function';
+  if(temPop){box.setAttribute('popover','manual');box.hidden=false}
+  const url=()=>location.origin+location.pathname;
+  // "impressão digital" do arquivo no servidor: ETag (ou data de alteração), sem o final que muda com a compressão
+  const marca=r=>{const e=r.headers.get('etag');if(e)return e.replace(/^W\//,'').replace(/"/g,'').split('-')[0];return r.headers.get('last-modified')||''};
+  let base=null,ult=0,adiadoAte=0,aviso=false;
+  async function confere(forca){
+    if(!/^https?:/.test(location.protocol)||aviso)return;
+    const ag=Date.now();if(!forca&&ag-ult<60e3)return;ult=ag;
+    try{
+      const r=await fetch(url(),{method:'HEAD',cache:'no-store'});if(!r.ok)return;
+      const m=marca(r);if(!m)return;
+      if(base===null){base=m;return}
+      if(m!==base)mostra();
+    }catch(e){}
+  }
+  function mostra(){
+    if(Date.now()<adiadoAte)return;
+    aviso=true;
+    if(temPop){try{box.showPopover()}catch(e){}}else box.hidden=false;
+  }
+  function esconde(){aviso=false;if(temPop){try{box.hidePopover()}catch(e){}}else box.hidden=true}
+  document.getElementById('nvvAtualizar').onclick=async function(){
+    this.disabled=true;this.textContent='Atualizando…';
+    // busca o arquivo novo direto do servidor (troca a cópia guardada) e recarrega a página
+    try{await fetch(url(),{cache:'reload'})}catch(e){}
+    try{if(window.caches)for(const k of await caches.keys())await caches.delete(k)}catch(e){}
+    location.reload();
+  };
+  // "Depois": esconde por 30 minutos e então avisa de novo
+  document.getElementById('nvvDepois').onclick=()=>{esconde();adiadoAte=Date.now()+30*60e3;setTimeout(()=>confere(true),30*60e3+1e3)};
+  confere(true);
+  setInterval(confere,5*60e3);                                                        // a cada 5 minutos
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')confere()}); // ao voltar para a aba
+  window.addEventListener('focus',()=>confere());
+  window.addEventListener('online',()=>confere(true));
 })();
 </script>
 </body>
