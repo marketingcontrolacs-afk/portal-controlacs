@@ -7426,8 +7426,9 @@ async function concLigar(ms,perguntar=true){
   ms=ms.filter(m=>!movConc(m));if(!ms.length)return {lig:0,man:0};
   const usados=new Set(),sem=[];let lig=0,man=0;
   for(const m of ms){const v=(m.tipo==='entrada'?1:-1)*(+m.valor);
-    let ls=[];try{const {data,error}=await sb.from('fin_ofx').select('id,data,valor,ignorado').eq('conta_id',m.conta_id).gte('data',addDias(m.data,-7)).lte('data',addDias(m.data,7)).gte('valor',r2(v-0.005)).lte('valor',r2(v+0.005));if(error)throw error;ls=(data||[]).filter(l=>!l.ignorado&&!usados.has(l.id))}catch(e){console.error(e)}
+    let ls=[];try{const {data,error}=await sb.from('fin_ofx').select('id,data,valor,ignorado,junto_mov').eq('conta_id',m.conta_id).gte('data',addDias(m.data,-7)).lte('data',addDias(m.data,7)).gte('valor',r2(v-0.005)).lte('valor',r2(v+0.005));if(error)throw error;ls=(data||[]).filter(l=>!l.ignorado&&!usados.has(l.id))}catch(e){console.error(e)}
     if(ls.length){const {data:lk}=await sb.from('fin_movimentos').select('ofx_id').in('ofx_id',ls.map(l=>l.id));const ja=new Set((lk||[]).map(x=>x.ofx_id));ls=ls.filter(l=>!ja.has(l.id))}
+    const jm=ls.filter(l=>l.junto_mov).map(l=>l.junto_mov);if(jm.length){const {data:jk}=await sb.from('fin_movimentos').select('id').in('id',jm).not('ofx_id','is',null);const jok=new Set((jk||[]).map(x=>x.id));ls=ls.filter(l=>!jok.has(l.junto_mov))}   // já entrou num lançamento somado
     const dd=l=>Math.abs(new Date(l.data)-new Date(m.data)),l=ls.sort((a,b)=>dd(a)-dd(b))[0];
     if(l){const {error}=await sb.from('fin_movimentos').update({ofx_id:l.id,conciliado:true}).eq('id',m.id);if(error)throw error;usados.add(l.id);lig++}else sem.push(m)}
   if(sem.length&&(!perguntar||confirm(`${sem.length===1?'Não achei a linha':'Não achei as linhas'} do extrato importado para ${sem.length} ${sem.length===1?'lançamento':'lançamentos'} (mesma conta, mesmo valor, até 7 dias).\n\nMarcar como conciliado mesmo assim? (OK = marcar, Cancelar = deixar sem conciliar)`))){
@@ -10718,9 +10719,11 @@ async function renderGC(recarrega=true){
 }
 // linhas do extrato ainda não validadas, de todas as contas e de qualquer data: ficam pendentes até validar ou ignorar (Carol, 04/11)
 async function gcPendCarrega(cli){
-  const [ls,ms]=await Promise.all([todas(()=>sb.from('fin_ofx').select('id,conta_id,data,ignorado').eq('cliente_id',cli.id)),
-    todas(()=>sb.from('fin_movimentos').select('ofx_id').eq('cliente_id',cli.id).not('ofx_id','is',null))]);
-  const conc=new Set(ms.map(m=>m.ofx_id));GC.pend={};GC.concIds=conc;GC.todasL=ls;
+  const [ls,ms]=await Promise.all([todas(()=>sb.from('fin_ofx').select('id,conta_id,data,ignorado,junto_mov').eq('cliente_id',cli.id)),
+    todas(()=>sb.from('fin_movimentos').select('id,ofx_id').eq('cliente_id',cli.id).not('ofx_id','is',null))]);
+  const conc=new Set(ms.map(m=>m.ofx_id)),movC=new Set(ms.map(m=>m.id));
+  ls.forEach(l=>{if(l.junto_mov&&movC.has(l.junto_mov))conc.add(l.id)});   // linha que entrou somada num lançamento só (Lançar juntas)
+  GC.pend={};GC.concIds=conc;GC.todasL=ls;
   ls.forEach(l=>{if(!l.ignorado&&!conc.has(l.id))(GC.pend[l.conta_id]||=[]).push(l)});
 }
 // aviso das pendentes fora do período ou em outra conta, e a lista dos extratos importados
@@ -10745,6 +10748,10 @@ function gcVerPend(cid){const ds=(GC.pend[cid]||[]).map(l=>l.data).sort();if(!ds
 // uma passada só, para duas linhas não ficarem com o mesmo lançamento ou a mesma conta
 function gcSugestoes(){
   GC.conc={};GC.movs.forEach(m=>{if(m.ofx_id)GC.conc[m.ofx_id]=m});GC.sug={};
+  // linhas lançadas juntas: ficam conciliadas pelo lançamento único com a soma (Carol, 13/11)
+  const movPor={};GC.movs.forEach(m=>movPor[m.id]=m);
+  GC.linhas.forEach(l=>{const m=l.junto_mov&&movPor[l.junto_mov];if(m&&m.ofx_id&&!GC.conc[l.id])GC.conc[l.id]=m});
+  GC.juntoQ={};GC.linhas.forEach(l=>{const m=GC.conc[l.id];if(m)GC.juntoQ[m.id]=(GC.juntoQ[m.id]||0)+1});
   const usadosM=new Set(),usadosT=new Set();
   for(const l of GC.linhas){if(GC.conc[l.id]||l.ignorado)continue;
     const tipo=l.valor>0?'entrada':'saida',v=Math.abs(l.valor),perto=(a,b)=>Math.abs(difDias(a,l.data))-Math.abs(difDias(b,l.data));
@@ -10776,7 +10783,7 @@ function gcDesenha(){
   const ok=a=>`<button type="button" class="btn small" data-gc="${a}">`;
   $('gcHead').hidden=false;$('gcTodas').checked=!!rows.length&&rows.every(l=>GC.sel.has(l.id));
   $('gcBody').innerHTML=rows.slice(0,MAX).map(l=>{const s=gcSit(l),m=GC.conc[l.id],g=GC.sug[l.id];
-    const cel=s==='conc'?`<span class="chip c-ok">✓ Conciliada</span> ${esc(m.descricao||m.pessoa_nome||'')}${m.categoria?' '+mu('· '+esc(m.categoria)):''}`
+    const cel=s==='conc'?`<span class="chip c-ok">✓ Conciliada</span> ${esc(m.descricao||m.pessoa_nome||'')}${m.categoria?' '+mu('· '+esc(m.categoria)):''}${(GC.juntoQ?.[m.id]||0)>1?' '+mu(`· lançamento único de ${fm(m.valor)} somando ${GC.juntoQ[m.id]} linhas`):''}`
       :s==='ign'?'<span class="chip c-none">Ignorada</span>'
       :s==='sug'?`<span class="chip c-warn">Sugestão</span> ${esc(g.txt)}`:'<span class="chip c-bad">Sem lançamento</span>';
     const acts=s==='conc'?`${ok('desfaz')}Desfazer</button>`:s==='ign'?`${ok('volta')}Voltar</button>`
@@ -10859,16 +10866,19 @@ async function gcDesfazer(l){
     if(t?.origem==='ofx'){   // conta a pagar/receber que a própria conciliação criou
       if(confirm('Apagar o lançamento ligado a esta linha? Ele sai também das contas a '+(m.tipo==='saida'?'pagar':'receber')+', da Movimentação e do Extrato da conta.\n\nOK = apagar\nCancelar = só desfazer a ligação (o lançamento continua)')){
         const {error}=await sb.from('fin_titulos').delete().eq('id',t.id);if(error)throw error;GC.movs=GC.movs.filter(x=>x.id!==m.id)}
-      else{const {error}=await sb.from('fin_movimentos').update({ofx_id:null,conciliado:false}).eq('id',m.id);if(error)throw error;m.ofx_id=null}
+      else{const {error}=await sb.from('fin_movimentos').update({ofx_id:null,conciliado:false}).eq('id',m.id);if(error)throw error;m.ofx_id=null;await gcSoltaJuntas(m)}
       return}}
   const apaga=!m.titulo_id?confirm('Apagar também o lançamento ligado a esta linha?\n\nOK = apagar o lançamento\nCancelar = só desfazer a ligação (o lançamento continua no extrato da conta)'):confirm('Desfazer a baixa da conta a '+(m.tipo==='saida'?'pagar':'receber')+' feita por esta linha? A conta volta a ficar em aberto.');
   if(apaga){const {error}=m.transf_id?await sb.from('fin_movimentos').delete().eq('transf_id',m.transf_id):await sb.from('fin_movimentos').delete().eq('id',m.id);if(error)throw error;
     GC.movs=GC.movs.filter(x=>x.id!==m.id&&!(m.transf_id&&x.transf_id===m.transf_id));
     if(m.titulo_id){GC.pago[m.titulo_id]=r2((GC.pago[m.titulo_id]||0)-abat(m));const t=GC.tits.find(x=>x.id===m.titulo_id);
       if(!t){const {data}=await sb.from('fin_titulos').select('*').eq('id',m.titulo_id).maybeSingle();if(data){GC.tits.push(data);if(data.origem_id)await sb.from('contas_pagar').update({conferido:false,pago_em:null}).eq('id',data.origem_id)}}}}
-  else if(!m.titulo_id){const {error}=await sb.from('fin_movimentos').update({ofx_id:null,conciliado:false}).eq('id',m.id);if(error)throw error;m.ofx_id=null}
+  else if(!m.titulo_id){const {error}=await sb.from('fin_movimentos').update({ofx_id:null,conciliado:false}).eq('id',m.id);if(error)throw error;m.ofx_id=null;await gcSoltaJuntas(m)}
   else return;
 }
+// desfeita a ligação do lançamento somado, as outras linhas lançadas juntas voltam a ficar pendentes
+async function gcSoltaJuntas(m){if(!GC.linhas.some(l=>l.junto_mov===m.id))return;
+  const {error}=await sb.from('fin_ofx').update({junto_mov:null}).eq('junto_mov',m.id);if(error)throw error;GC.linhas.forEach(l=>{if(l.junto_mov===m.id)l.junto_mov=null})}
 // importar o arquivo OFX
 // - confere o banco do arquivo com a conta (o extrato do PagBank não entra mais no Inter)
 // - soma as linhas do mesmo dia com o mesmo histórico numa linha só, com a quantidade
@@ -10895,8 +10905,11 @@ $('gcArq').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f|
   const ds=o.linhas.map(l=>l.data).sort(),d0=ds[0],d1=ds[ds.length-1];
   toast('Conferindo o que já foi importado…');
   let exist=[],conc=new Set(),arqAnt=null;
-  try{exist=await todas(()=>sb.from('fin_ofx').select('id,chave,valor,qtd,itens,fitid,ignorado').eq('conta_id',c.id).gte('data',d0).lte('data',d1));
+  try{exist=await todas(()=>sb.from('fin_ofx').select('id,chave,valor,qtd,itens,fitid,ignorado,junto_mov').eq('conta_id',c.id).gte('data',d0).lte('data',d1));
     const ids=exist.map(x=>x.id);for(let i=0;i<ids.length;i+=200){const {data,error}=await sb.from('fin_movimentos').select('ofx_id').in('ofx_id',ids.slice(i,i+200));if(error)throw error;(data||[]).forEach(m=>conc.add(m.ofx_id))}
+    const jm=[...new Set(exist.filter(x=>x.junto_mov).map(x=>x.junto_mov))],jok=new Set();   // linhas lançadas juntas num lançamento só
+    for(let i=0;i<jm.length;i+=200){const {data,error}=await sb.from('fin_movimentos').select('id').in('id',jm.slice(i,i+200)).not('ofx_id','is',null);if(error)throw error;(data||[]).forEach(m=>jok.add(m.id))}
+    exist.forEach(x=>{if(x.junto_mov&&jok.has(x.junto_mov))conc.add(x.id)});
     const ra=await sb.from('fin_ofx_arquivos').select('*').eq('conta_id',c.id).lte('ini',d1).gte('fim',d0).order('importado_em',{ascending:false}).limit(1);if(!ra.error)arqAnt=(ra.data||[])[0]||null;
   }catch(err){console.error(err);return toast(v47(err)?v47Msg:'Não foi possível conferir o extrato. Verifique a internet e tente de novo.')}
   const docDe=h=>(h.match(/(?<!\d)(\d{14}|\d{11})(?!\d)/)||[])[1]||null;
@@ -10944,7 +10957,7 @@ async function abrirGC(ls){
   const comum=ls.every(x=>x.padrao===l.padrao)?l.padrao:'';
   const doc=l.documento&&pes.find(p=>soDig(p.documento)===l.documento);
   $('gtdTitle').textContent=um?`${tipo==='entrada'?'Entrada':'Saída'} de ${fm(Math.abs(l.valor))} em ${dBR(l.data)}`:`${ls.length} ${tipo==='entrada'?'entradas':'saídas'} (${fm(tot)})`;$('gtdChip').innerHTML='';
-  $('gtdBody').innerHTML=`<p class="note" style="margin:0">${um?'Banco: '+esc(histDe(l)):'Mesmo lançamento para as '+ls.length+' linhas selecionadas.'}</p>
+  $('gtdBody').innerHTML=`<p class="note" style="margin:0">${um?'Banco: '+esc(histDe(l)):'As '+ls.length+' linhas selecionadas viram um lançamento só, com a soma'+(new Set(ls.map(x=>x.data)).size>1?' (um por dia)':'')+'. No Extrato da conta aparece uma linha só.'}</p>
     <datalist id="gcPesList">${pes.map(p=>`<option value="${esc(p.nome)}"></option>`).join('')}</datalist>
     <div class="fields">
       <label class="f wide">O que é<select id="gc_modo"><option value="novo">Lançamento novo (${tipo==='entrada'?'receita':'despesa'}, tarifa, etc.)</option>${outras.length?`<option value="transf">Transferência ${tipo==='saida'?'para':'de'} outra conta (desta ou de outra empresa do grupo)</option>`:''}${tits.length?`<option value="tit">Baixa de uma conta a ${tipo==='saida'?'pagar':'receber'} em aberto</option>`:''}</select></label>
@@ -10975,10 +10988,15 @@ async function gcSalvar(){
     const lembra=$('gc_lembra').checked,pad=padraoDe($('gc_pad').value);
     if(lembra&&pad.length<4)return gtErr('Informe o texto que identifica estas linhas no extrato do banco.');
     if(lembra&&ls.some(x=>!(x.padrao||'').includes(pad)))return gtErr('O texto que identifica precisa aparecer em todas as linhas selecionadas.');
-    const novos=[];
-    for(const x of ls){if(dest){const tid=crypto.randomUUID(),b={descricao:desc,transf_id:tid};novos.push(gcMov(x,b),{...gcMov(x,b),cliente_id:cliDaConta(dest,cli.id),conta_id:dest,tipo:tipo==='saida'?'entrada':'saida',ofx_id:null,conciliado:false})}
-      else novos.push(gcMov(x,{descricao:desc,categoria:cat,pessoa_nome:pes,documento:x.documento}))}
+    // Lançar juntas: as linhas do mesmo dia viram UM lançamento só com a soma, ligado a todas elas (Carol, 13/11)
+    const novos=[],juntas=[],porDia=new Map();ls.forEach(x=>{if(!porDia.has(x.data))porDia.set(x.data,[]);porDia.get(x.data).push(x)});
+    for(const g of porDia.values()){const x0=g[0],mid=crypto.randomUUID(),docs=[...new Set(g.map(y=>y.documento||''))];
+      const x=g.length===1?x0:{...x0,valor:r2(g.reduce((a,y)=>a+(+y.valor),0)),qtd:g.reduce((a,y)=>a+(y.qtd||1),0)};
+      if(dest){const tid=crypto.randomUUID(),b={descricao:desc,transf_id:tid};novos.push({...gcMov(x,b),id:mid},{...gcMov(x,b),cliente_id:cliDaConta(dest,cli.id),conta_id:dest,tipo:tipo==='saida'?'entrada':'saida',ofx_id:null,conciliado:false})}
+      else novos.push({...gcMov(x,{descricao:desc,categoria:cat,pessoa_nome:pes,documento:docs.length===1?docs[0]||null:null}),id:mid});
+      if(g.length>1)juntas.push([mid,g.slice(1).map(y=>y.id)])}
     await gcInserir(novos);
+    for(const [mid,ids] of juntas){const {error}=await sb.from('fin_ofx').update({junto_mov:mid}).in('id',ids);if(error)throw error}
     if(lembra){const {error}=await sb.from('fin_conc_regras').upsert({cliente_id:cli.id,padrao:pad,tipo,descricao:desc,categoria:dest?null:cat,pessoa_nome:dest?null:pes,conta_destino:dest,usos:ls.length,atualizado_em:new Date().toISOString()},{onConflict:'cliente_id,padrao,tipo'});if(error)console.error(error)}
   }
   toast(ls.length>1?ls.length+' linhas conciliadas':'Linha conciliada');dlgGT.close();GC.sel.clear();renderGC();
@@ -12225,6 +12243,7 @@ const MANUAL=[
 <li>Escolha a <b>Conta</b> e clique em <b>Importar OFX</b>. O portal confere o banco do arquivo: se o extrato for de outro banco (ex.: um arquivo do PagBank com a conta Inter escolhida), ele avisa e oferece a conta certa.</li>
 <li>Os lançamentos do <b>mesmo dia</b> com o <b>mesmo histórico</b> do banco (ex.: <i>Vendas - Disponível PIX</i>, vendas no cartão) entram somados numa linha só, com a observação “R$ 10.000,00 = 10 lançamentos somados”. Passe o mouse na observação para ver os valores.</li>
 <li>Para cada linha: <b>Aprovar</b> a sugestão, <b>Lançar</b> (lançamento novo, transferência ou baixa de uma conta em aberto) ou <b>Ignorar</b>. Marque várias linhas para lançar ou aprovar de uma vez.</li>
+<li><b>Lançar juntas</b>: marque as linhas do mesmo tipo (ex.: CIELO ELO, MASTER e VISA do dia) e clique em <b>Lançar juntas</b>. O portal soma as linhas de cada dia e cria <b>um lançamento só</b> com a categoria escolhida, ligado a todas elas. No Extrato da conta aparece uma linha só com a soma. Se clicar em <b>Desfazer</b> numa delas, todas voltam a ficar pendentes.</li>
 <li>O que você validar aparece também nas <b>Contas a receber</b> (entradas) ou nas <b>Contas a pagar</b> (saídas), já baixado, na <b>Movimentação financeira</b> e no <b>Extrato da conta</b>, onde dá para corrigir e conferir o saldo com o banco.</li>
 </ol>
 <ul>
@@ -12501,6 +12520,8 @@ async function agBadge(){
 // Para avisar uma atualização nova, acrescente no COMEÇO da lista. para: 'esc' só o escritório; mods: só quem vê algum desses módulos.
 // =====================================================================
 const NOVIDADES=[
+  {k:'2026-11-13lancar-juntas-soma',data:'2026-11-13',t:'Lançar juntas soma num lançamento só',itens:[
+    {x:'Gestão financeira › Conciliação bancária: “Lançar juntas” agora soma as linhas selecionadas do mesmo dia e cria um lançamento só (mesma categoria, mesma conta), ligado a todas elas. No Extrato da conta aparece uma linha com a soma, em vez de um CIELO por linha.',para:'esc'}]},
   {k:'2026-11-12grupos-empresas',data:'2026-11-12',t:'Filiais e grupos de empresas',itens:[
     {x:'Configurações › Cadastro de empresas: nova coluna “Filial de”. Na filial, escolha a matriz; deixe em branco na matriz e nas empresas sem filial. A matriz que tem filial já aparece como grupo “Matriz + filiais”.',para:'esc'},
     {x:'Configurações › Cadastro de empresas › Grupos de empresas: crie grupos (ex.: Oliveira, Pato Branco, Campos Souto e MAR) e marque as empresas de cada um. Uma empresa pode estar em mais de um grupo.',para:'esc'},
