@@ -13378,7 +13378,7 @@ $('ctdFoot').addEventListener('click',e=>{const b=e.target.closest('[data-ctact]
 $('ctdBody').addEventListener('click',e=>{const b=e.target.closest('[data-ctact]');if(b){e.stopPropagation();ctAcao(b.dataset.ctact,b)}});
 const MANUAL=[
   {g:'Primeiros passos',itens:[
-    {k:'_inicio',t:'Como navegar no portal',img:'menu.png',
+    {k:'_inicio',t:'Como navegar no portal',img:'menu.png',vid:'portal-no-celular.mp4',vidt:'Portal no celular: como instalar (2 min)',
       txt:`<p>Entre com o seu e-mail e a sua senha. Deixe marcado <b>Lembrar meu login e senha neste aparelho</b> e, quando o navegador ou o celular perguntar, toque em <b>Salvar senha</b>: nas próximas vezes o e-mail e a senha já aparecem preenchidos (a senha fica guardada no próprio navegador/celular, não no portal). Em computador de uso compartilhado, desmarque a opção e não salve a senha. No alto da tela ficam a <b>Empresa</b>, os <b>módulos</b> e o caminho da tela aberta.</p>
 <ol>
 <li><b>Empresa:</b> escolha a empresa no alto. Ela vale para todos os módulos e continua escolhida quando você troca de tela ou atualiza a página. Quem vê mais de uma empresa tem também a opção <b>Todas as empresas</b>, que soma os quadros de todas. Se houver <b>grupos de empresas</b> (Configurações › Cadastro de empresas), aparecem também as opções <b>Grupo: …</b>, que somam só as empresas do grupo; a matriz com filiais vira um grupo sozinha.</li>
@@ -13416,7 +13416,7 @@ const MANUAL=[
 <li>Clique em <b>Enviar fechamento</b>.</li>
 </ol>
 <p>O quadro <b>Últimos dias</b> mostra a situação dos dias anteriores. Dias sem lançamento ou com diferença sem explicação aparecem marcados para você resolver.</p>`},
-    {k:'pagar',t:'Boletos e notas fiscais a pagar',img:'pagar.png',
+    {k:'pagar',t:'Boletos e notas fiscais a pagar',img:'pagar.png',vid:'boletos-notas-cartao.mp4',vidt:'Boletos, notas e cartão de crédito (3 min)',
       txt:`<p>O cliente envia o boleto e a nota fiscal de cada conta, e a Controlacs faz o pagamento. O envio é simples: só o anexo e a descrição.</p>
 <ol>
 <li>Clique em <b>+ Nova conta</b>.</li>
@@ -13440,7 +13440,7 @@ const MANUAL=[
 <p>Os quadros mostram o saldo anterior, as entradas, as despesas, os depósitos, o saldo atual e quantos lançamentos o escritório ainda vai conferir. Troque o mês em <b>Período</b>.</p>
 <h4>Conferência física</h4>
 <p>Pelo menos uma vez por semana, conte o dinheiro e use <b>Conferir o dinheiro agora</b>. O portal compara com o saldo e mostra a falta ou a sobra. Empresas sem conferência há mais de 7 dias aparecem em vermelho e com aviso no menu.</p>`},
-    {k:'cartao',t:'Cartão de crédito',img:'cartao.png',
+    {k:'cartao',t:'Cartão de crédito',img:'cartao.png',vid:'boletos-notas-cartao.mp4',vidt:'Boletos, notas e cartão de crédito (3 min)',
       txt:`<p>As notas fiscais das compras pagas com o cartão de crédito da empresa.</p>
 <ol>
 <li>Clique em <b>+ Nova nota</b>.</li>
@@ -13683,7 +13683,7 @@ function renderManual(){
   $('mnIdx').innerHTML=grupos.map(x=>`<h3>${esc(x.g)}</h3>${x.itens.map(i=>`<a href="#${ids(i)}" data-mn="${ids(i)}">${esc(i.t)}</a>`).join('')}`).join('')||'<p class="muted" style="margin:6px">Nada encontrado.</p>';
   const feitas=new Set(MANUAL.flatMap(x=>x.itens.map(i=>i.k)));
   const faltam=NAV.filter(n=>!n.aba&&!feitas.has(n.k)&&n.ok()&&eqPode(n.k)).map(n=>n.t);
-  $('mnConteudo').innerHTML=grupos.map(x=>x.itens.map(i=>`<article class="card mnsec" id="${ids(i)}"><p class="mng">${esc(x.g)}</p><h2>${esc(i.t)}</h2>${i.vid?`<div class="mnvid"><p class="mnvidt">▶ Vídeo explicativo: Caixa e Tesouraria (4 min)</p><video controls preload="none" poster="manual/rotina-caixa-tesouraria.jpg" src="manual/${i.vid}"></video></div>`:''}${i.img?`<a class="mnimg" href="manual/${i.img}" target="_blank" rel="noopener" title="Abrir a imagem em tamanho maior"><img src="manual/${i.img}" loading="lazy" alt="Exemplo da tela ${esc(i.t)}"></a>`:''}${i.txt}</article>`).join('')).join('')
+  $('mnConteudo').innerHTML=grupos.map(x=>x.itens.map(i=>`<article class="card mnsec" id="${ids(i)}"><p class="mng">${esc(x.g)}</p><h2>${esc(i.t)}</h2>${i.vid?`<div class="mnvid"><p class="mnvidt">▶ Vídeo explicativo: ${esc(i.vidt||'Caixa e Tesouraria (4 min)')}</p><video controls preload="none" poster="manual/${i.vid.replace(/\.mp4$/,'.jpg')}" src="manual/${i.vid}"></video></div>`:''}${i.img?`<a class="mnimg" href="manual/${i.img}" target="_blank" rel="noopener" title="Abrir a imagem em tamanho maior"><img src="manual/${i.img}" loading="lazy" alt="Exemplo da tela ${esc(i.t)}"></a>`:''}${i.txt}</article>`).join('')).join('')
     +(!b&&faltam.length?`<article class="card mnsec"><p class="mng">Em construção</p><h2>Próximas partes do manual</h2><p>O manual está sendo escrito por partes. Estas telas que você usa ainda vão ganhar explicação: ${esc(faltam.join(', '))}.</p></article>`:'');
 }
 $('mnBusca').addEventListener('input',()=>renderManual());
@@ -14193,6 +14193,9 @@ $('ctConteudo').addEventListener('dragend',e=>{e.target.closest?.('.crmcard')?.c
 $('ctConteudo').addEventListener('dragover',e=>{const col=e.target.closest('#crmBoard .kcol');if(!col||!CRM.drag)return;e.preventDefault();document.querySelectorAll('#crmBoard .kcol.over').forEach(x=>x!==col&&x.classList.remove('over'));col.classList.add('over')});
 $('ctConteudo').addEventListener('drop',e=>{const col=e.target.closest('#crmBoard .kcol');if(!col||!CRM.drag)return;e.preventDefault();col.classList.remove('over');const o=CRM.op.find(x=>x.id===CRM.drag);CRM.drag=null;crmMuda(o,col.dataset.crmcol)});
 const NOVIDADES=[
+  {k:'2026-11-16video2',data:'2026-11-16',t:'Novos vídeos na Ajuda: boletos, cartão e celular',itens:[
+    {x:'Em Ajuda › Manual do sistema, nas partes Boletos e notas fiscais a pagar e Cartão de crédito, tem um vídeo de 3 minutos mostrando como enviar o boleto, a nota ou o cupom (anexe o documento antes de preencher: o portal lê e completa sozinho).',mods:['pagar','cartao','manual']},
+    {x:'Na parte Como navegar no portal, um vídeo de 2 minutos ensina a colocar o portal na tela inicial do celular (iPhone e Android), como se fosse um aplicativo.',mods:['manual']}]},
   {k:'2026-11-16adto',data:'2026-11-16',t:'Recibo de adiantamento salarial',itens:[
     {x:'Nova tela RH › Adiantamento salarial: escolha o colaborador, o valor e a data do pagamento e clique em Gerar recibo. Sai o recibo para assinar, entra a conta a pagar (categoria Adto. de Salário) e o desconto na coluna Adiantamento da folha do mês.',mods:['adto']},
     {x:'Quem já tem adiantamento no cadastro (ex.: Oliveira) não fica com desconto em dobro: o recibo substitui o valor que estava na folha do mês.',mods:['adto','folha']},
