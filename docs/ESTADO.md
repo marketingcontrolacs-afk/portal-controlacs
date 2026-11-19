@@ -2,6 +2,15 @@
 
 Cada sessão acrescenta uma linha no topo: **data · conta · o que mudou · o que ficou pendente**.
 
+- **19/11/2026 19:35 · conta 2 · banco: migration `fin_contas_ligar_tes_so_quando_muda`**
+  - **Problema:** salvar uma conta bancária (por exemplo, a Sicredi da MP Coronel) dava "canceling statement due to statement timeout".
+  - **Causa:** o trigger `fin_contas_ligar_tes` rodava `tes_ligar_banco` (a empresa inteira) em todo update que citasse nome, conta_bc, tipo ou ativo, mesmo sem mudar nada. O front sempre manda esses campos.
+  - **Correção:** o trigger foi dividido em dois:
+    - `fin_contas_ligar_tes`, só no insert;
+    - `fin_contas_ligar_tes_upd`, no update, com `WHEN` (só quando algum desses quatro campos muda de verdade).
+  - Não houve mudança no `index.html`.
+  - **Pendente:** se trocar o nome, o tipo, o "ativo" ou o nome no Bom Controle numa empresa grande, ainda pode estourar o tempo. Nesse caso, otimizar o `tes_ligar_banco`.
+
 - **19/11/2026 16:05 · conta 1 (thread "Anexar boleto no pagamento de parceiros") · publicado (OK da Carol)**
   - **Boleto só guardado no repasse** (Carol, 19/11: anexar não pode mandar sozinho para a remessa; às vezes ela paga à mão). No repasse SEM conta a pagar, "📎 Anexar boleto"/"Colar linha" (`rnBolItem`) só lê a linha e guarda arquivos + linha em `repasse_itens.boleto` (**v165** RODADA); não cria conta a pagar. Chip "📎 Boleto guardado" com Ver e Tirar boleto (Desfazer). `rnCriaTitulos` (Pagar em / Gerar) cria a conta já como Boleto, com o valor do boleto (diferença na obs) e os anexos. Repasse que já tem conta a pagar continua anexando nela (`bolNoTitulo`).
 
