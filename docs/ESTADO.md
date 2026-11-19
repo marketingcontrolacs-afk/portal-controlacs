@@ -2,6 +2,14 @@
 
 Cada sessão acrescenta uma linha no topo: **data · conta · o que mudou · o que ficou pendente**.
 
+- **19/11/2026 20:35 · conta 2 · branch `fix/remessa-regra-sequencial`**
+  - **Regra da numeração da remessa (Sicredi):** o banco espera o número seguinte ao último arquivo que ele **aceitou**; arquivo recusado não conta.
+    - Quando a recusa é por **"Sequencial fora de ordem"**, NÃO se libera o número (responder "Cancelar" na 2ª pergunta) e se acerta o "Nº da última remessa" da conta.
+    - A pergunta do cancelamento e o manual agora explicam isso.
+  - **Caso MPA Pato Branco (Sicredi, convênio 78D7):** nenhum arquivo tinha sido aceito.
+    - Os nº 1 a 4 foram liberados (nsa negativo e `/C` no seu número), e `cnab_seq` voltou para 0.
+    - O arquivo seguinte, nº 1, foi aceito em 19/11.
+
 - **19/11/2026 19:35 · conta 2 · banco: migration `fin_contas_ligar_tes_so_quando_muda`**
   - **Problema:** salvar uma conta bancária (por exemplo, a Sicredi da MP Coronel) dava "canceling statement due to statement timeout".
   - **Causa:** o trigger `fin_contas_ligar_tes` rodava `tes_ligar_banco` (a empresa inteira) em todo update que citasse nome, conta_bc, tipo ou ativo, mesmo sem mudar nada. O front sempre manda esses campos.
