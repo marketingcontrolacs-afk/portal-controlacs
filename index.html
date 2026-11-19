@@ -5070,7 +5070,7 @@ function bolConfere(bol,ref){if(!bol)return '';const ms=[];
   // emissor que não aplicou a regra de 2025 do fator de vencimento (passou de 9999 e escreveu 5 números, empurrando o valor):
   // ex.: Royalties DIMAK venc. 20/11/2026 "1 10636000927875" = fator 10636 + valor 9.278,75 (Carol, 18/11)
   const f5=ms.length?bolFora(bol):null;
-  if(f5)return `o boleto foi emitido fora do padrão dos bancos (fator de vencimento com 5 números): o certo seria vencimento ${dBR(f5.venc)} e valor ${fm(f5.valor)}, mas o banco vai ler ${fm(bol.valor)} e ${dBR(bol.venc)}. Peça um boleto novo ao fornecedor ou pague por Pix/TED`;
+  if(f5)return `o boleto foi emitido fora do padrão dos bancos (fator de vencimento com 5 números): o certo é vencimento ${dBR(f5.venc)} e valor ${fm(f5.valor)} (o banco mostra o certo porque consulta o boleto registrado). Use a linha do DDA: ${f5.linha}`;
   return ms.join(' e ')}
 // e monta a linha certa (fator da regra de 2025 + valor com 10 números + DV), que é a mesma do DDA do banco (Carol, 18/11: Sicredi DDA conferido)
 function bolFora(bol){const d=soDig(bol?.linha||'');if(bol?.tipo!=='banco'||d.length!==47||+d.slice(33,38)<10000)return null;
@@ -9883,7 +9883,7 @@ async function gtLeArquivo(f,mais,cat){
     if(!$('gt_pessoa').value.trim()){const fo=guiaForn(g,cli?.id,GFP.lista||[]);if(fo)poe('gt_pessoa',fo,'fornecedor');else avisos.push('escolha o fornecedor da guia (ex.: Receita Federal ou Ministério da Economia)')}
     if(g.itens.length>1&&Math.abs(g.soma-(g.valor||0))>=0.01)avisos.push(`a soma dos códigos da guia (${fm(g.soma)}) não bate com o total (${fm(g.valor)}): confira o rateio`)}
   // boleto: linha digitável (o campo já preenche valor e vencimento e avisa se o boleto estiver lançado em outra conta)
-  if(r.bol?.corrigida)avisos.push(`o boleto veio com a linha digitável fora do padrão dos bancos (vencimento com 5 números); usei a linha corrigida, que é a mesma do DDA (${fm(r.bol.valor)}, venc. ${dBR(r.bol.venc)}). Confira com o DDA antes de pagar`);
+  if(r.bol?.corrigida)avisos.push(`o boleto veio com a linha digitável e o código de barras fora do padrão (vencimento com 5 números; o banco mostra certo porque consulta o boleto registrado). Usei a linha corrigida, a mesma do DDA (${fm(r.bol.valor)}, venc. ${dBR(r.bol.venc)})`);
   if(r.bol){const el=$('gt_linha_digitavel');if(el&&!soDig(el.value)){el.value=r.bol.linha||r.bol.barra;el.dispatchEvent(new Event('input',{bubbles:true}));lidos.push('linha digitável')}
     poe('gt_valor',r.bol.valor,'valor',fm,true);poe('gt_vencimento',r.bol.venc,'vencimento',dBR);if(!$('gt_forma').value)$('gt_forma').value='Boleto'}
   // vencimento das duplicatas da nota (a próxima ainda não vencida; senão, a primeira)
